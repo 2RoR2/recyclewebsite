@@ -4,64 +4,75 @@ import { escapeHtml } from "./templates.js";
 
 const adminNavGroups = [
   { label: "Bins", items: [["manage-qr", "Manage QR Code"], ["manage-bins", "Manage Bins"], ["bin-status", "Bin Status"]] },
-  { label: "Records", items: [["waste-records", "Waste Records"], ["points-management", "Points Management"], ["penalty-management", "Penalty Management"], ["reports", "Reports"]] },
   { label: "Rewards", items: [["manage-rewards", "Manage Items"], ["redemptions", "Redemption Requests"]] },
-  { label: "People", items: [["manage-users", "Manage Users"], ["feedback-admin", "Feedback"]] },
-  { label: "System", items: [["manage-quiz", "Manage Quiz"], ["announcement", "Announcement"]] },
+  { label: "User", items: [["manage-users", "Manage Users"]] },
 ];
 
 const navForRole = () => {
   if (role() === "user") {
     return [
-      ["scan", "Scan QR"],
+      ["locations", "Bins"],
       ["education", "Learn"],
-      ["quiz", "Quiz"],
       ["game", "Game"],
       ["rewards", "Redeem"],
-      ["leaderboard", "Leaderboard"],
-      ["locations", "Bins"],
-      ["contact", "Feedback"],
     ];
   }
 
-  return [
-    ["home", "Home"],
-    ["education", "Learn"],
-    ["about", "About"],
-    ["public-bins", "Bins"],
-    ["preview-rewards", "Rewards"],
-    ["contact", "Contact"],
-  ];
+  return [];
 };
 
+const adminDesktopNav = () => `
+  <button class="${state.page === "admin-dashboard" ? "active" : ""}" data-page="admin-dashboard">Dashboard</button>
+  ${adminNavGroups
+    .map(
+      (group) => group.items.length === 1
+        ? `<button class="${state.page === group.items[0][0] ? "active" : ""}" data-page="${group.items[0][0]}">${group.items[0][1]}</button>`
+        : `
+      <div class="dropdown">
+        <button class="dropdown-toggle ${group.items.some(([page]) => page === state.page) ? "active" : ""}" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          ${group.label}
+        </button>
+        <ul class="dropdown-menu dropdown-menu-dark">
+          ${group.items
+            .map(([page, label]) => `<li><button class="dropdown-item ${state.page === page ? "active" : ""}" data-page="${page}">${label}</button></li>`)
+            .join("")}
+        </ul>
+      </div>
+    `
+    )
+    .join("")}
+`;
+
+const collapsedMenu = (items, dashboard = false) => `
+  <div class="dropdown main-menu">
+    <button class="dropdown-toggle nav-menu-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Menu</button>
+    <ul class="dropdown-menu dropdown-menu-dark">
+      ${dashboard ? `<li><button class="dropdown-item ${state.page === "admin-dashboard" ? "active" : ""}" data-page="admin-dashboard">Dashboard</button></li>` : ""}
+      ${items.map(([page, label]) => `<li><button class="dropdown-item ${state.page === page ? "active" : ""}" data-page="${page}">${label}</button></li>`).join("")}
+    </ul>
+  </div>
+`;
+
 export const renderNav = (navLinks, navActions) => {
+  const user = currentUser();
+  navLinks.classList.toggle("has-dropdowns", role() === "admin");
+  navActions.classList.toggle("guest-auth-actions", !user);
+
   if (role() === "admin") {
     navLinks.innerHTML = `
-      <button class="${state.page === "admin-dashboard" ? "active" : ""}" data-page="admin-dashboard">Dashboard</button>
-      ${adminNavGroups
-        .map(
-          (group) => `
-          <div class="dropdown">
-            <button class="dropdown-toggle ${group.items.some(([page]) => page === state.page) ? "active" : ""}" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-              ${group.label}
-            </button>
-            <ul class="dropdown-menu dropdown-menu-dark">
-              ${group.items
-                .map(([page, label]) => `<li><button class="dropdown-item ${state.page === page ? "active" : ""}" data-page="${page}">${label}</button></li>`)
-                .join("")}
-            </ul>
-          </div>
-        `
-        )
-        .join("")}
+      <div class="desktop-nav">${adminDesktopNav()}</div>
+      <div class="mobile-nav">${collapsedMenu(adminNavGroups.flatMap((group) => group.items), true)}</div>
     `;
   } else {
-    navLinks.innerHTML = navForRole()
-      .map(([page, label]) => `<button class="${state.page === page ? "active" : ""}" data-page="${page}">${label}</button>`)
-      .join("");
+    const items = navForRole();
+    navLinks.innerHTML = user
+      ? `
+        <div class="desktop-nav">${items.map(([page, label]) => `<button class="${state.page === page ? "active" : ""}" data-page="${page}">${label}</button>`).join("")}</div>
+        <div class="mobile-nav">${collapsedMenu(items)}</div>
+      `
+      : "";
   }
 
-  const user = currentUser();
   navActions.innerHTML = user
     ? `
       <div class="dropdown account-menu">
@@ -74,10 +85,6 @@ export const renderNav = (navLinks, navActions) => {
             user.role === "user"
               ? `
                 <li><button class="dropdown-item ${state.page === "history" ? "active" : ""}" data-page="history">History</button></li>
-                <li><button class="dropdown-item ${state.page === "points" ? "active" : ""}" data-page="points">Points Record</button></li>
-                <li><button class="dropdown-item ${state.page === "penalties" ? "active" : ""}" data-page="penalties">Penalty Record</button></li>
-                <li><button class="dropdown-item ${state.page === "learning-records" ? "active" : ""}" data-page="learning-records">Learning Records</button></li>
-                <li><button class="dropdown-item ${state.page === "my-redeemed" ? "active" : ""}" data-page="my-redeemed">My Redeemed Items</button></li>
                 <li><button class="dropdown-item ${state.page === "collection" ? "active" : ""}" data-page="collection">Collection Code</button></li>
               `
               : `<li><button class="dropdown-item ${state.page === "reports" ? "active" : ""}" data-page="reports">Reports</button></li>`

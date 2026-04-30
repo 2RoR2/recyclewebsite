@@ -1,4 +1,4 @@
-import { collectionLocation, gameItems, state, wasteGuide, wasteTypes } from "../../backend/database.js";
+import { collectionLocation, gameItems, state, wasteGuide } from "../../backend/database.js";
 import { currentUser, selectedBin, selectedReward, userLearningRecords, userRecords, userRedeemed } from "../../backend/services.js";
 import { escapeHtml, recordsTable, renderBins, renderContact, renderEducation, renderRewards, sectionTitle, stat } from "../shared/templates.js";
 
@@ -12,28 +12,41 @@ const redeemedCard = (item) => `
 `;
 
 const renderSelectWaste = () => `
+  ${(() => {
+    const activeZone = selectedBin().accepts;
+    const zoneClass = (zone) => activeZone === zone ? "active" : "";
+    return `
   <section class="page">
-    ${sectionTitle("Select Waste Type", "Choose what you threw. The system checks it against the scanned bin.")}
+    ${sectionTitle("Bin Scan", "")}
     <div class="scanned-bin-hero panel card shadow-sm">
       <p class="eyebrow">Scanned Bin</p>
       <h1>${escapeHtml(selectedBin().name)}</h1>
       <div class="mini-row">
-        <span>${escapeHtml(selectedBin().id)}</span>
-        <span>Accepts ${escapeHtml(selectedBin().accepts)}</span>
+        <span>${escapeHtml(selectedBin().location)}</span>
+        <span>Bin type: ${escapeHtml(selectedBin().accepts)}</span>
       </div>
     </div>
-    <div class="panel card shadow-sm verification-panel">
-      <p class="eyebrow">No Sensor Mode</p>
-      <h2>System checks bin type against your selected waste</h2>
-      <p class="lead">Example: Plastic Bin + Plastic waste = +1 point. Plastic Bin + Paper waste = wrong bin penalty.</p>
-    </div>
-    <div class="choice-grid">
-      ${wasteTypes.map((type) => `<button class="choice ${state.selectedWaste === type ? "active" : ""}" data-waste="${type}">${type}</button>`).join("")}
-    </div>
-    <div class="row">
-      <button class="btn btn-success primary-btn" data-record="check">Record Disposal</button>
+    <div class="panel card shadow-sm ai-scan-card">
+      <div>
+        <p class="eyebrow">${state.locationCheck?.verified ? "Ready" : "GPS Required"}</p>
+        <h2>${state.locationCheck?.verified ? "Ready for camera detection" : "Verify GPS to continue"}</h2>
+        ${state.aiDetection ? `<p class="lead">${escapeHtml(state.aiDetection.label)} - ${state.aiDetection.confidence}% confidence (${escapeHtml(state.sensorCheck?.zone || "Unknown zone")})</p>` : ""}
+      </div>
+      ${state.locationCheck?.verified ? `
+        <div class="ai-zone-wrapper">
+          <video id="aiSensorFeed" class="ai-sensor-preview" autoplay muted playsinline></video>
+          <div class="ai-zone-grid">
+            <button type="button" class="ai-zone ${zoneClass("Plastic")}" data-zone-select="Plastic"><span>Plastic Bin Zone</span></button>
+            <button type="button" class="ai-zone ${zoneClass("Paper")}" data-zone-select="Paper"><span>Paper Bin Zone</span></button>
+            <button type="button" class="ai-zone ${zoneClass("General Waste")}" data-zone-select="General Waste"><span>General Bin Zone</span></button>
+          </div>
+        </div>
+        <button class="btn btn-success primary-btn" data-action="start-detection">Start Detection</button>
+      ` : `<button class="btn btn-success primary-btn" data-action="verify-location">Verify GPS & Start Detection</button>`}
     </div>
   </section>
+`;
+  })()}
 `;
 
 const renderItemDetail = () => {
@@ -84,17 +97,68 @@ const renderRedeemed = () => `
 `;
 
 const renderCollection = () => {
-  const item = userRedeemed()[0];
+  const items = userRedeemed();
+  const filterText = String(state.collectionFilterText || "").trim().toLowerCase();
+  const filterStatus = state.collectionFilterStatus || "All";
+  const formatDate = (timestamp) => {
+    if (!timestamp || Number.isNaN(Number(timestamp))) return "Not available";
+    return new Intl.DateTimeFormat("en-MY", { dateStyle: "medium", timeStyle: "short" }).format(new Date(Number(timestamp)));
+  };
+  const expiryForItem = (item) => {
+    const redeemedAt = item.redeemedAtMs || (typeof item.id === "number" ? item.id : null);
+    const expiresAt = item.expiresAtMs || (redeemedAt ? redeemedAt + (1000 * 60 * 60 * 24 * 30) : null);
+    return expiresAt;
+  };
+  const filteredItems = items.filter((item) => {
+    const statusLabel = item.status === "Collected" ? "Already Redeemed" : item.status;
+    const textMatch = !filterText
+      || item.item.toLowerCase().includes(filterText)
+      || item.code.toLowerCase().includes(filterText)
+      || statusLabel.toLowerCase().includes(filterText);
+    const statusMatch = filterStatus === "All" || item.status === filterStatus;
+    return textMatch && statusMatch;
+  });
 
   return `
     <section class="page">
-      ${sectionTitle("Collection Page", "Show your pickup code and follow the map to the Smart Recycle counter at i-CATS Kuching.")}
+      ${sectionTitle("Collection Page", "Show your pickup code and follow the map to the EcoCycle Sarawak collection counter.")}
       <div class="collection-layout">
         <div class="panel auth-card card shadow-lg border-0">
-          <p class="eyebrow">Pickup Code</p>
-          <h1>${escapeHtml(item?.item || "No collection yet")}</h1>
-          <div class="qr-box large">${escapeHtml(item?.code || "COL-00000")}</div>
-          <p class="lead">Show this code to the admin counter to collect your approved item.</p>
+          <p class="eyebrow">Pickup Codes</p>
+          <h1>${items.length ? "Your Collection List" : "No collection yet"}</h1>
+          ${items.length ? `
+            <div class="inline-form">
+              <input type="search" data-collection-filter-text placeholder="Search item, code, or status" value="${escapeHtml(state.collectionFilterText)}">
+              <select data-collection-filter-status>
+                ${["All", "Pending", "Approved", "Rejected", "Collected"].map((status) => `<option ${state.collectionFilterStatus === status ? "selected" : ""}>${status}</option>`).join("")}
+              </select>
+            </div>
+          ` : ""}
+          ${items.length === 0 ? `
+            <div class="qr-box large">COL-00000</div>
+            <p class="lead">Redeem an item first to receive a pickup code.</p>
+          ` : `
+            <div class="grid-2">
+              ${filteredItems.map((item) => {
+                const expiresAt = expiryForItem(item);
+                const isExpired = expiresAt ? Date.now() > expiresAt : false;
+                const statusLabel = item.status === "Collected" ? "Already Redeemed" : item.status;
+                return `
+                  <article class="card h-100 shadow-sm">
+                    <p class="eyebrow">${escapeHtml(item.item)}</p>
+                    <div class="qr-box">${escapeHtml(item.code)}</div>
+                    <div class="mini-row">
+                      <span>Status: ${escapeHtml(statusLabel)}</span>
+                      <span>${isExpired ? "Expired" : "Valid"}</span>
+                    </div>
+                    <p><strong>Expired Date:</strong> ${escapeHtml(formatDate(expiresAt))}</p>
+                  </article>
+                `;
+              }).join("")}
+            </div>
+            ${filteredItems.length === 0 ? `<p class="lead">No collection code matched your filters.</p>` : ""}
+            <p class="lead">Show an active code to the admin counter to collect your approved item.</p>
+          `}
           <div class="mini-row">
             <span>${escapeHtml(collectionLocation.name)}</span>
             <span>${escapeHtml(collectionLocation.place)}</span>
@@ -129,37 +193,12 @@ const renderLeaderboard = () => `
   </section>
 `;
 
-const shuffled = (items) => [...items].sort(() => Math.random() - 0.5);
-
-const renderQuiz = () => `
-  <section class="page">
-    ${sectionTitle("Recycle Quiz", "Answer simple questions to practise the difference between recyclable and non-recyclable waste.")}
-    <form class="quiz-form" data-form="quiz">
-      ${shuffled(state.quizQuestions).map((question, index) => `
-        <article class="panel card shadow-sm">
-          <p class="eyebrow">Question ${index + 1}</p>
-          <h2>${escapeHtml(question.question)}</h2>
-          <div class="choice-grid small-choice-grid">
-            ${shuffled(question.options).map((option) => `
-              <label class="choice option-choice">
-                <input type="radio" name="${escapeHtml(question.id)}" value="${escapeHtml(option)}" required>
-                <span>${escapeHtml(option)}</span>
-              </label>
-            `).join("")}
-          </div>
-        </article>
-      `).join("")}
-      <button class="btn btn-success primary-btn" type="submit">Submit Quiz</button>
-    </form>
-  </section>
-`;
-
 const renderGame = () => {
   const gamePayload = JSON.stringify(gameItems).replaceAll("&", "&amp;").replaceAll("'", "&#039;");
 
   return `
   <section class="page">
-    ${sectionTitle("3D Sorting Game", "Drag each rubbish item into the correct virtual bin. The system records whether the drop is accurate.")}
+    ${sectionTitle("Sorting Game", "Practice sorting rubbish into the correct virtual bin. The game is for learning only and does not give points.")}
     <div class="three-game-shell panel shadow-sm">
       <div class="three-game-top">
         <div>
@@ -173,7 +212,7 @@ const renderGame = () => {
         </div>
       </div>
       <div id="threeGame" class="three-game" data-items='${gamePayload}'></div>
-      <p class="lead game-hint">Tip: drag the floating rubbish item across the scene and release it above a bin.</p>
+      <p class="lead game-hint">Tip: practise here first so you choose the correct bin during real scans and avoid penalties.</p>
     </div>
   </section>
 `;
@@ -181,7 +220,7 @@ const renderGame = () => {
 
 const renderLearningRecords = () => `
   <section class="page">
-    ${sectionTitle("Learning Records", "Quiz and sorting game attempts are recorded here.")}
+    ${sectionTitle("Learning Records", "Sorting game attempts are recorded here for learning review.")}
     <div class="table-wrap">
       <table>
         <thead><tr><th>Type</th><th>Item</th><th>Score</th><th>Points</th><th>Date</th></tr></thead>
@@ -200,6 +239,66 @@ const renderLearningRecords = () => `
     </div>
   </section>
 `;
+
+const renderHistoryAll = () => {
+  const filterText = String(state.historyFilterText || "").trim().toLowerCase();
+  const filterType = state.historyFilterType || "All";
+  const combined = [
+    ...userRecords().map((record) => ({
+      id: record.id,
+      type: record.points < 0 ? "Penalty" : "Point",
+      detail: `${record.waste} (${record.bin})`,
+      result: record.status,
+      points: record.points,
+      date: record.date,
+    })),
+    ...userLearningRecords().map((record) => ({
+      id: record.id,
+      type: "Learning Record",
+      detail: `${record.item || "Sorting Game"} (${record.answer || "-"})`,
+      result: `${record.score}/${record.total}`,
+      points: record.points,
+      date: record.date,
+    })),
+  ].sort((a, b) => (b.id || 0) - (a.id || 0));
+  const filtered = combined.filter((item) => {
+    const typeMatch = filterType === "All" || item.type === filterType;
+    const textMatch = !filterText
+      || item.type.toLowerCase().includes(filterText)
+      || item.detail.toLowerCase().includes(filterText)
+      || item.result.toLowerCase().includes(filterText)
+      || item.date.toLowerCase().includes(filterText);
+    return typeMatch && textMatch;
+  });
+
+  return `
+    <section class="page">
+      ${sectionTitle("History", "All points, penalties, and learning records in one place.")}
+      <div class="inline-form">
+        <input type="search" data-history-filter-text placeholder="Search detail, result, date..." value="${escapeHtml(state.historyFilterText)}">
+        <select data-history-filter-type>
+          ${["All", "Point", "Penalty", "Learning Record"].map((type) => `<option ${state.historyFilterType === type ? "selected" : ""}>${type}</option>`).join("")}
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Type</th><th>Detail</th><th>Result</th><th>Points</th><th>Date</th></tr></thead>
+          <tbody>
+            ${filtered.length === 0 ? `<tr><td colspan="5">No history matched your filters.</td></tr>` : filtered.map((item) => `
+              <tr>
+                <td>${escapeHtml(item.type)}</td>
+                <td>${escapeHtml(item.detail)}</td>
+                <td>${escapeHtml(item.result)}</td>
+                <td>${item.points}</td>
+                <td>${escapeHtml(item.date)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+};
 
 const renderProfile = () => {
   const user = currentUser();
@@ -225,21 +324,20 @@ const renderProfile = () => {
         </aside>
 
         <div class="panel auth-card card shadow-lg border-0">
-          <p class="eyebrow">Profile Settings</p>
-          <h1>Account Details</h1>
+          <div class="profile-settings-head">
+            <p class="eyebrow">Profile Settings</p>
+            <h1>Account Details</h1>
+            <p class="lead">Update your account details, contact information, and privacy preferences.</p>
+          </div>
           <form class="form" data-form="profile">
-            <label>Profile Image<input name="avatar" type="file" accept="image/*"></label>
-            <label>Name<input name="name" value="${escapeHtml(user.name)}"></label>
-            <label>Email<input name="email" type="email" value="${escapeHtml(user.email)}"></label>
-            <label>Phone<input name="phone" value="${escapeHtml(user.phone)}" placeholder="Optional phone number"></label>
-            <label>${user.role === "admin" ? "Office / Counter" : "Campus / Area"}<input name="location" value="${escapeHtml(user.location)}"></label>
-            <label>Account Visibility
-              <select name="privacy">
-                ${["Public ranking", "Private activity", "Admin only"].map((option) => `<option ${user.privacy === option ? "selected" : ""}>${option}</option>`).join("")}
-              </select>
-            </label>
-            <label class="check-row"><input name="notifications" type="checkbox" ${user.notifications ? "checked" : ""}> Account notifications</label>
-            <label>New Password<input name="password" type="password" placeholder="Leave blank to keep current password"></label>
+            <div class="profile-form-grid">
+              <label class="profile-field full">Profile Image<input name="avatar" type="file" accept="image/*"></label>
+              <label class="profile-field">Name<input name="name" value="${escapeHtml(user.name)}"></label>
+              <label class="profile-field">Email<input name="email" type="email" value="${escapeHtml(user.email)}"></label>
+              <label class="profile-field">Phone<input name="phone" value="${escapeHtml(user.phone)}" placeholder="Optional phone number"></label>
+              <label class="profile-field">${user.role === "admin" ? "Office / Counter" : "Area"}<input name="location" value="${escapeHtml(user.location)}"></label>
+              <label class="profile-field full">New Password<input name="password" type="password" placeholder="Leave blank to keep current password"></label>
+            </div>
             <button class="btn btn-success primary-btn" type="submit">Save Profile</button>
           </form>
         </div>
@@ -253,7 +351,6 @@ export const renderUserPage = () => {
 
   if (state.page === "scan" || state.page === "locations") return renderBins();
   if (state.page === "education") return renderEducation(wasteGuide);
-  if (state.page === "quiz") return renderQuiz();
   if (state.page === "game") return renderGame();
   if (state.page === "learning-records") return renderLearningRecords();
   if (state.page === "select-waste") return renderSelectWaste();
@@ -264,7 +361,7 @@ export const renderUserPage = () => {
   if (state.page === "redeem-confirm") return renderRedeemConfirm();
   if (state.page === "my-redeemed") return renderRedeemed();
   if (state.page === "collection") return renderCollection();
-  if (state.page === "history") return recordsTable("History", userRecords());
+  if (state.page === "history") return renderHistoryAll();
   if (state.page === "leaderboard") return renderLeaderboard();
   if (state.page === "contact") return renderContact();
   if (state.page === "profile") return renderProfile();

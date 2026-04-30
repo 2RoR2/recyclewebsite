@@ -1,37 +1,64 @@
-import { state, wasteGuide } from "../../backend/database.js";
-import { renderBins, renderContact, renderEducation, renderRewards, escapeHtml, sectionTitle } from "../shared/templates.js";
+import { state } from "../../backend/database.js";
+import { escapeHtml, sectionTitle } from "../shared/templates.js";
 
 const renderHome = () => `
-  <section class="hero container-fluid platform-hero">
-    <img class="hero-img" src="/images/recycle-hero.png" alt="Smart recycling bins">
-    <div class="hero-copy">
-      <p class="eyebrow">Smart Recycle</p>
-      <h1>Recycle smarter. Earn cleaner rewards.</h1>
-      <p class="lead">A working campus recycling platform where users scan smart bins, learn sorting, collect points, and redeem sustainable items.</p>
-      <div class="hero-actions">
-        <button class="btn btn-success primary-btn" data-auth="register">Create Account</button>
-        <button class="btn btn-outline-success ghost-btn" data-page="preview-rewards">View Rewards</button>
-        <button class="btn btn-light text-btn hero-login" data-auth="login">Login</button>
+  <section class="landing-auth store-hero" data-home-hero>
+    <div class="hero-image-transition" aria-hidden="true">
+      <img src="/images/recycle-people.jpg" alt="">
+    </div>
+    <div class="landing-overlay">
+      <div class="landing-copy">
+        <p class="eyebrow">EcoCycle Sarawak</p>
+        <h1>Recycle better. Earn meaningful rewards.</h1>
+        <p class="lead">A Sarawak recycling platform where locals scan smart bin locations, verify disposal, collect points, and redeem sustainable rewards.</p>
+        <div class="trust-row">
+          <span>Location QR</span>
+          <span>Waste verification</span>
+          <span>Reward redemption</span>
+        </div>
+        <div class="hero-actions">
+          <button class="btn btn-success primary-btn" data-auth="register">Start Recycling</button>
+          <button class="btn btn-light text-btn hero-login" data-auth="login">Login</button>
+        </div>
       </div>
-      <div class="trust-row">
-        <span>QR verified disposal</span>
-        <span>Protect the environment</span>
-        <span>Eco-friendly</span>
+      <div class="landing-showcase">
+        <div class="showcase-art">
+          <img class="flower-art flower-art-top" src="/images/recycle-flower.png" alt="">
+          <img class="showcase-image" src="/images/recycle-tree.png" alt="EcoCycle message visual">
+        </div>
       </div>
     </div>
   </section>
-  <section class="content-band">
-    <div class="section-title mb-4">
-      <p class="eyebrow">How it works</p>
-      <h1>Recycle smarter. Earn cleaner rewards.</h1>
-      <p class="lead">Each QR code belongs to a smart bin. Scan, select what have been thrown, and the system checks the bin type before issuing points.</p>
+  <section class="store-shelf" data-store-shelf>
+    <div class="store-headline">
+      <h2>EcoCycle in one view.</h2>
+      <p>Scan, learn, redeem, and locate bins quickly.</p>
     </div>
+    <div class="store-card-row">
+      ${[
+        ["Scan", "Scan one QR to start disposal.", "recycle-hero.png"],
+        ["Learn", "Practice sorting before real use.", "recycle-flow.png"],
+        ["Redeem", "Use points for useful rewards.", "recycle-rewards.png"],
+        ["Locate", "Find active bins across Sarawak.", "recycle-locate.jpg"],
+      ].map(([title, text, image]) => `
+        <article class="store-card">
+          <img src="/images/${image}" alt="">
+          <div>
+            <span>${title}</span>
+            <p>${text}</p>
+          </div>
+        </article>
+      `).join("")}
+    </div>
+  </section>
+  <section class="content-band landing-band">
+    ${sectionTitle("How EcoCycle Works", "Each recycling location has its own QR code. Scan the code, allow location check, and then show your item so the system can confirm you are using the right bin at the right place.")}
     <div class="process-grid">
       ${[
-        ["01", "Scan the bin", "Every bin has its own QR link and accepted waste type."],
-        ["02", "Choose waste", "Select what you threw after the QR identifies the bin."],
-        ["03", "Get verified", "The system compares bin type with selected waste."],
-        ["04", "Redeem items", "Collect enough points and request rewards for pickup."],
+        ["01", "Scan location QR", "One QR code identifies the recycling location."],
+        ["02", "Show your item clearly", "After the short countdown, hold your item in view so it can be checked."],
+        ["03", "Get confirmation", "The system verifies your location and matches your item with the selected bin category."],
+        ["04", "Redeem rewards", "Keep recycling to collect points, then use them to redeem available items."],
       ].map(([number, title, text]) => `
         <article class="card h-100 shadow-sm process-card">
           <span>${number}</span>
@@ -41,62 +68,45 @@ const renderHome = () => `
       `).join("")}
     </div>
   </section>
-  <section class="content-band split-band">
-    <img class="split-img shadow" src="/images/recycle-flow.png" alt="Phone scanning a recycling QR code">
-    <div>
-      <p class="eyebrow">Education first</p>
-      <h1>A cleaner way to improve your recycling habits.</h1>
-      <p class="lead">Quiz questions, sorting game, QR records, leaderboards, and redemption pickup make recycling a more engaging and educational experience.</p>
-      <button class="btn btn-success primary-btn" data-page="education">Open Waste Guide</button>
-    </div>
-  </section>
 `;
 
-const renderAuth = () => {
+const renderAuth = ({ embedded = false } = {}) => {
   const isLogin = state.authMode === "login";
 
   return `
-    <section class="page auth-wrap">
-      <div class="panel auth-card card shadow-lg border-0">
+    <section class="${embedded ? "auth-embedded" : "page auth-wrap"}">
+      <div class="${embedded ? "" : "panel auth-card card shadow-lg border-0"}">
         <p class="eyebrow">${isLogin ? "Welcome back" : "Create account"}</p>
         <h1>${isLogin ? "Login" : "Sign Up"}</h1>
-        <p class="lead">${isLogin ? "Use email and password. Demo accounts are shown below." : "New accounts are created as normal users."}</p>
+        <p class="lead">${isLogin ? "Continue scanning bins and redeeming rewards." : "Create an account for scan history, points, rewards, and learning records."}</p>
         <form class="form" data-form="${isLogin ? "login" : "register"}">
-          ${isLogin ? "" : `<label>Name<input name="name" value="${escapeHtml(state.form.name)}"></label>`}
-          <label>Email<input name="email" type="email" value="${escapeHtml(state.form.email)}"></label>
-          <label>Password<input name="password" type="password" value="${escapeHtml(state.form.password)}"></label>
+          ${isLogin ? "" : `
+            <label>Username
+              <input name="name" autocomplete="name" minlength="2" placeholder="Example: Aina" value="${escapeHtml(state.form.name)}">
+              <small>This name appears in your recycling records, leaderboard, feedback, and redemption requests.</small>
+            </label>
+          `}
+          <label>Email
+            <input name="email" type="email" autocomplete="email" placeholder="you@example.com" value="${escapeHtml(state.form.email)}">
+            <small>Use this email to login and recover your EcoCycle account later.</small>
+          </label>
+          <label>Password
+            <input name="password" type="password" autocomplete="${isLogin ? "current-password" : "new-password"}" ${isLogin ? "" : "minlength=\"8\" pattern=\"(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,}\""} placeholder="${isLogin ? "Enter your password" : "At least 8 characters"}" value="${escapeHtml(state.form.password)}">
+            <small>${isLogin ? "Enter the password you used when creating your account." : "Use uppercase, lowercase, number, and symbol. Example: EcoCycle@2026"}</small>
+          </label>
           <button class="btn btn-success primary-btn" type="submit">${isLogin ? "Login" : "Sign Up"}</button>
         </form>
         <div class="demo-row">
           <button class="btn btn-outline-success ghost-btn" data-demo="user">Fill User Demo</button>
           <button class="btn btn-outline-success ghost-btn" data-demo="admin">Fill Admin Demo</button>
         </div>
-        <button class="btn btn-light text-btn" data-auth="${isLogin ? "register" : "login"}">${isLogin ? "Need an account? Sign up" : "Already have an account? Login"}</button>
+        ${embedded ? "" : `<button class="btn btn-light text-btn" data-auth="${isLogin ? "register" : "login"}">${isLogin ? "Need an account? Sign up" : "Already have an account? Login"}</button>`}
       </div>
     </section>
   `;
 };
 
-const renderAbout = () => `
-  <section class="page grid-2">
-    <img class="split-img shadow" src="/images/recycle-flow.png" alt="QR recycling points flow">
-    <div>
-      ${sectionTitle("About The System", "The project solves irresponsible rubbish disposal by connecting smart bins, QR records, points, penalties, and rewards in one web system.")}
-      <ul class="lead">
-        <li>Sustainability purpose: encourage proper recycling habits.</li>
-        <li>Innovation: QR code on each smart bin records bin location and user action.</li>
-        <li>Reward idea: every valid rubbish disposal gives one point.</li>
-      </ul>
-    </div>
-  </section>
-`;
-
 export const renderGuestPage = () => {
   if (state.page === "auth") return renderAuth();
-  if (state.page === "education") return renderEducation(wasteGuide);
-  if (state.page === "about") return renderAbout();
-  if (state.page === "public-bins") return renderBins({ guest: true });
-  if (state.page === "preview-rewards") return renderRewards({ preview: true });
-  if (state.page === "contact") return renderContact();
   return renderHome();
 };

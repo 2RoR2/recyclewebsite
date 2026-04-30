@@ -1,6 +1,17 @@
 import { state } from "../../backend/database.js";
-import { recordsTable, renderBins, sectionTitle, stat, escapeHtml } from "../shared/templates.js";
+import { binStations, recordsTable, renderBins, sectionTitle, stat, escapeHtml } from "../shared/templates.js";
 import { renderUserPage } from "../user/pages.js";
+
+const rewardImageSrc = (reward) => {
+  if (reward.image) return reward.image;
+  const name = reward.name.toLowerCase();
+  if (name.includes("rm5")) return "/images/redeem/reoladpinRM5.png";
+  if (name.includes("rm10")) return "/images/redeem/reloadpinRM10.png";
+  if (name.includes("rm30")) return "/images/redeem/reloadpinRM30.png";
+  if (name.includes("electricity")) return "/images/redeem/electricalbill.png";
+  if (name.includes("water")) return "/images/redeem/waterbill.png";
+  return "/images/redeem/reloadpinRM10.png";
+};
 
 const miniRecords = (records) => `
   <div class="table-wrap compact-table">
@@ -21,6 +32,27 @@ const miniRecords = (records) => `
   </div>
 `;
 
+const reportTable = (title, headers, rows) => `
+  <section class="panel card shadow-sm report-section">
+    <div class="panel-head">
+      <h2>${escapeHtml(title)}</h2>
+      <span class="badge">${rows.length} records</span>
+    </div>
+    <div class="table-wrap compact-table">
+      <table>
+        <thead>
+          <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+        </thead>
+        <tbody>
+          ${rows.length === 0
+    ? `<tr><td colspan="${headers.length}">No records found.</td></tr>`
+    : rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(String(cell ?? ""))}</td>`).join("")}</tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+  </section>
+`;
+
 const renderAdminDashboard = () => {
   const totalUsers = state.users.filter((user) => user.role === "user").length;
   const totalScans = state.records.length;
@@ -35,8 +67,10 @@ const renderAdminDashboard = () => {
       <div class="dashboard-header">
         ${sectionTitle("Admin Dashboard", "Monitor system health, pending work, and recycling activity from one place.")}
         <div class="dashboard-actions">
-          <button class="btn btn-success" data-page="redemptions">Review Requests</button>
+          <button class="btn btn-outline-success" data-page="manage-users">Manage Users</button>
+          <button class="btn btn-outline-success" data-page="manage-rewards">Manage Items</button>
           <button class="btn btn-outline-success" data-page="reports">View Reports</button>
+          <button class="btn btn-success" data-page="redemptions">Review Requests</button>
         </div>
       </div>
 
@@ -54,10 +88,10 @@ const renderAdminDashboard = () => {
             <button class="btn btn-sm btn-outline-success" data-page="manage-bins">Manage</button>
           </div>
           <div class="status-list">
-            ${state.bins.map((bin) => `
+            ${binStations().map((station) => `
               <div>
-                <span><strong>${escapeHtml(bin.name)}</strong><small>${escapeHtml(bin.location)}</small></span>
-                <b class="badge ${bin.status.toLowerCase()}">${escapeHtml(bin.status)}</b>
+                <span><strong>${escapeHtml(station.name)}</strong><small>${station.bins.length} bins: Plastic, Paper, General Waste</small></span>
+                <b class="badge ${station.bins.some((bin) => bin.status !== "Available") ? "maintenance" : "available"}">${station.bins.some((bin) => bin.status !== "Available") ? "Check" : "Available"}</b>
               </div>
             `).join("")}
           </div>
@@ -68,7 +102,7 @@ const renderAdminDashboard = () => {
           <div class="work-list">
             <button data-page="redemptions"><strong>${pendingRequests}</strong><span>redemption requests waiting</span></button>
             <button data-page="bin-status"><strong>${problemBins.length}</strong><span>bins full, offline, or maintenance</span></button>
-            <button data-page="feedback-admin"><strong>${state.feedback.filter((item) => item.status === "Open").length}</strong><span>open feedback reports</span></button>
+            <button data-page="manage-users"><strong>${totalUsers}</strong><span>registered users managed here</span></button>
           </div>
         </section>
 
@@ -101,14 +135,17 @@ const renderAdminDashboard = () => {
 
 const renderQrManager = () => `
   <section class="page">
-    ${sectionTitle("Manage QR Code", "Each QR contains a scan link with the bin ID. Users scan it, login if needed, then select the waste type.")}
-    <div class="grid-3">${state.bins.map((bin) => `
-      <article class="card">
-        <canvas class="generated-qr" data-qr-bin="${escapeHtml(bin.id)}"></canvas>
-        <h2>${escapeHtml(bin.name)}</h2>
-        <p>${escapeHtml(bin.location)}</p>
-        <span class="badge">${escapeHtml(bin.id)}</span>
-        <p class="qr-url" data-qr-url-for="${escapeHtml(bin.id)}"></p>
+    ${sectionTitle("Manage QR Code", "Each location has one QR code linked to the station location.")}
+    <div class="grid-3">${binStations().map((station) => `
+      <article class="card station-card">
+        <p class="eyebrow">Location QR</p>
+        <h2>${escapeHtml(station.name)}</h2>
+        <p>${escapeHtml(station.location)}</p>
+        <div class="station-location-qr">
+          <canvas class="generated-qr" data-qr-station="${escapeHtml(station.code)}"></canvas>
+          <strong>${escapeHtml(station.code)}</strong>
+          <p class="qr-url" data-qr-url-for-station="${escapeHtml(station.code)}"></p>
+        </div>
       </article>
     `).join("")}</div>
   </section>
@@ -116,16 +153,27 @@ const renderQrManager = () => `
 
 const renderManageBins = () => `
   <section class="page">
-    ${sectionTitle("Manage Bins", "Add, edit, remove, and update bin status.")}
-    <button class="btn btn-success primary-btn" data-action="add-bin">Add Bin</button>
+    ${sectionTitle("Manage Bins", "Each station has three bins. Update the status for Plastic, Paper, or General Waste separately.")}
+    <div class="crud-toolbar">
+      <button class="btn btn-success primary-btn" data-action="add-bin">Add Bin</button>
+    </div>
     <div class="grid-3">
-      ${state.bins.map((bin) => `
-        <article class="card h-100 shadow-sm">
-          <h2>${escapeHtml(bin.name)}</h2>
-          <p>${escapeHtml(bin.location)}</p>
-          <select data-bin-status="${bin.id}">
-            ${["Available", "Full", "Maintenance", "Offline"].map((status) => `<option ${bin.status === status ? "selected" : ""}>${status}</option>`).join("")}
-          </select>
+      ${binStations().map((station) => `
+        <article class="card h-100 shadow-sm station-card">
+          <p class="eyebrow">Smart Bin Station</p>
+          <h2>${escapeHtml(station.name)}</h2>
+          <p>${escapeHtml(station.location)}</p>
+          <div class="station-bin-set">
+            ${station.bins.map((bin) => `
+              <label class="station-bin ${bin.accepts.toLowerCase()}">
+                <strong>${escapeHtml(bin.accepts)}</strong>
+                <span>${escapeHtml(bin.id)}</span>
+                <select data-bin-status="${bin.id}">
+                  ${["Available", "Full", "Maintenance", "Offline"].map((status) => `<option ${bin.status === status ? "selected" : ""}>${status}</option>`).join("")}
+                </select>
+              </label>
+            `).join("")}
+          </div>
         </article>
       `).join("")}
     </div>
@@ -133,78 +181,164 @@ const renderManageBins = () => `
 `;
 
 const renderManageUsers = () => `
+  ${(() => {
+    const filterText = String(state.adminUserFilterText || "").trim().toLowerCase();
+    const users = state.users.filter((user) => user.role === "user");
+    const filteredUsers = users.filter((user) =>
+      !filterText
+      || user.name.toLowerCase().includes(filterText)
+      || user.email.toLowerCase().includes(filterText)
+      || (user.location || "").toLowerCase().includes(filterText)
+    );
+
+    return `
   <section class="page">
     ${sectionTitle("Manage Users", "Admins can view points, penalties, redemption history, and suspicious activity. Passwords are not shown.")}
+    <section class="panel card shadow-sm mb-3">
+      <h2>Add User</h2>
+      <form class="inline-form crud-form" data-form="add-user">
+        <input name="name" placeholder="Full name" required>
+        <input name="email" type="email" placeholder="Email" required>
+        <input name="password" type="password" placeholder="Password" required>
+        <input name="location" placeholder="Location (optional)">
+        <button class="btn btn-success primary-btn" type="submit">Add User</button>
+      </form>
+    </section>
+    <div class="inline-form crud-toolbar">
+      <input data-admin-user-filter type="search" placeholder="Filter users by name, email, or location" value="${escapeHtml(state.adminUserFilterText)}">
+    </div>
     <div class="grid-3">
-      ${state.users.filter((user) => user.role === "user").map((user) => `
-        <article class="card h-100 shadow-sm">
+      ${filteredUsers.map((user) => `
+        <article class="card h-100 shadow-sm crud-card">
           <h2>${escapeHtml(user.name)}</h2>
           <p>${escapeHtml(user.email)}</p>
           <div class="mini-row"><span>${user.points} points</span><span>${user.penalties} penalties</span></div>
           <p>${state.redeemed.filter((item) => item.userId === user.id).length} redemptions</p>
-          <div class="row"><button class="btn btn-success" data-adjust="${user.id}:1">+1</button><button class="btn btn-outline-danger" data-adjust="${user.id}:-1">-1</button></div>
+          <div class="row crud-actions">
+            <button class="btn btn-success" data-adjust="${user.id}:1">+1 Point</button>
+            <button class="btn btn-outline-danger" data-adjust="${user.id}:-1">-1 Point</button>
+            <button class="btn btn-outline-success" data-manage-user="${user.id}">View Detail</button>
+          </div>
         </article>
       `).join("")}
     </div>
+    ${filteredUsers.length === 0 ? `<p>No user matched this filter.</p>` : ""}
   </section>
 `;
+  })()}
+`;
+
+const renderManageUserDetail = () => {
+  const users = state.users.filter((user) => user.role === "user");
+  const selectedUser = users.find((user) => user.id === state.selectedManagedUserId) || users[0] || null;
+  if (!selectedUser) {
+    return `
+      <section class="page">
+        ${sectionTitle("User Detail", "No user selected.")}
+        <button class="btn btn-outline-success btn-sm" data-page="manage-users">Back</button>
+      </section>
+    `;
+  }
+
+  const userRecords = state.records.filter((record) => record.userId === selectedUser.id);
+  const userFeedback = state.feedback.filter((item) => item.userId === selectedUser.id || item.email === selectedUser.email);
+
+  return `
+    <section class="page">
+      ${sectionTitle("User Detail", "Detailed record for selected user.")}
+      <div class="row">
+        <button class="btn btn-outline-success btn-sm mb-3" style="width:auto;" data-page="manage-users">Back</button>
+      </div>
+      <section class="panel card shadow-sm">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Selected User</p>
+            <h2>${escapeHtml(selectedUser.name)}</h2>
+            <p>${escapeHtml(selectedUser.email)} | ${escapeHtml(selectedUser.location || "No location")}</p>
+          </div>
+          <div class="row crud-actions">
+            <button class="btn btn-success" data-adjust="${selectedUser.id}:1">+1 Point</button>
+            <button class="btn btn-outline-danger" data-adjust="${selectedUser.id}:-1">-1 Point</button>
+            <button class="btn btn-danger danger-btn" data-delete-user="${selectedUser.id}">Delete User</button>
+          </div>
+        </div>
+        <div class="grid-3">
+          ${stat("Points", selectedUser.points)}
+          ${stat("Penalties", selectedUser.penalties)}
+          ${stat("Redemptions", state.redeemed.filter((item) => item.userId === selectedUser.id).length)}
+        </div>
+        <h2>User Waste History</h2>
+        ${miniRecords(userRecords)}
+        <h2>User Feedback</h2>
+        <div class="grid-3">
+          ${userFeedback.length === 0 ? "<p>No feedback from this user.</p>" : userFeedback.map((item) => `
+            <article class="card h-100 shadow-sm">
+              <p>${escapeHtml(item.issue)}</p>
+              <small>${escapeHtml(item.date)}</small>
+              <span class="badge">${escapeHtml(item.status)}</span>
+            </article>
+          `).join("")}
+        </div>
+        <h2>Edit User</h2>
+        <form class="inline-form crud-form" data-form="edit-managed-user">
+          <input name="userId" type="hidden" value="${selectedUser.id}">
+          <input name="name" value="${escapeHtml(selectedUser.name)}" placeholder="Name">
+          <input name="email" type="email" value="${escapeHtml(selectedUser.email)}" placeholder="Email">
+          <input name="location" value="${escapeHtml(selectedUser.location || "")}" placeholder="Location">
+          <input name="password" type="password" placeholder="New password (optional)">
+          <button class="btn btn-success primary-btn" type="submit">Save User</button>
+        </form>
+      </section>
+    </section>
+  `;
+};
 
 const renderManageRewards = () => `
   <section class="page">
-    ${sectionTitle("Manage Redeem Items", "Add, edit, or delete redeemable items.")}
-    <form class="inline-form" data-form="add-reward">
-      <input name="name" placeholder="Item name" value="${escapeHtml(state.newItem.name)}">
-      <input name="points" type="number" min="1" value="${state.newItem.points}">
-      <input name="stock" type="number" min="0" value="${state.newItem.stock}">
+    ${sectionTitle("Manage Redeem Items", "Add items with image upload, then update image or remove items anytime.")}
+    <form class="inline-form crud-form" data-form="add-reward">
+      <label class="profile-field">Item Name<input name="name" placeholder="Item name" value="${escapeHtml(state.newItem.name)}"></label>
+      <label class="profile-field">Description<input name="desc" placeholder="Item description" value="${escapeHtml(state.newItem.desc || "")}"></label>
+      <label class="profile-field">Points Required<input name="points" type="number" min="1" value="${state.newItem.points}"></label>
+      <label class="profile-field">Quantity in Stock<input name="stock" type="number" min="0" value="${state.newItem.stock}"></label>
+      <label class="profile-field full">Upload Item Image<input name="newRewardImage" type="file" accept="image/*"></label>
+      ${state.newItem.image ? `<img class="split-img" src="${escapeHtml(state.newItem.image)}" alt="New reward preview">` : ""}
       <button class="btn btn-success primary-btn" type="submit">Add Item</button>
     </form>
     <div class="grid-3">
       ${state.rewards.map((reward) => `
-        <article class="card h-100 shadow-sm">
+        <article class="card h-100 shadow-sm crud-card">
+          <img src="${escapeHtml(state.rewardDrafts?.[reward.id]?.image || rewardImageSrc(reward))}" alt="${escapeHtml(reward.name)}">
           <h2>${escapeHtml(reward.name)}</h2>
-          <div class="mini-row"><span>${reward.points} pts</span><span>${reward.stock} stock</span></div>
-          <button class="btn btn-danger danger-btn" data-delete-reward="${reward.id}">Delete</button>
+          <p>${escapeHtml(reward.desc)}</p>
+          <div class="mini-row"><span>${reward.points} pts</span><span>${reward.stock} quantity</span></div>
+          <label class="profile-field">Edit Points
+            <input data-reward-points="${reward.id}" type="number" min="1" value="${reward.points}">
+          </label>
+          <label class="profile-field">Edit Quantity
+            <input data-reward-stock="${reward.id}" type="number" min="0" value="${reward.stock}">
+          </label>
+          <label class="profile-field">Change Image<input data-reward-image="${reward.id}" type="file" accept="image/*"></label>
+          <div class="row crud-actions">
+            <button class="btn btn-success" data-save-reward="${reward.id}">Save</button>
+            <button class="btn btn-danger danger-btn" data-delete-reward="${reward.id}">Delete</button>
+          </div>
         </article>
       `).join("")}
     </div>
   </section>
 `;
-
-const renderManageQuiz = () => `
-  <section class="page">
-    ${sectionTitle("Manage Quiz", "Add or remove quiz questions for the user recycle quiz.")}
-    <form class="quiz-admin-form panel card shadow-sm" data-form="add-quiz">
-      <input name="question" placeholder="Question" value="${escapeHtml(state.newQuiz.question)}">
-      <input name="option1" placeholder="Option 1" value="${escapeHtml(state.newQuiz.option1)}">
-      <input name="option2" placeholder="Option 2" value="${escapeHtml(state.newQuiz.option2)}">
-      <input name="option3" placeholder="Option 3" value="${escapeHtml(state.newQuiz.option3)}">
-      <input name="answer" placeholder="Correct answer" value="${escapeHtml(state.newQuiz.answer)}">
-      <button class="btn btn-success primary-btn" type="submit">Add Question</button>
-    </form>
-    <div class="grid-3">
-      ${state.quizQuestions.map((question) => `
-        <article class="card h-100 shadow-sm">
-          <h2>${escapeHtml(question.question)}</h2>
-          <div class="mini-row">${question.options.map((option) => `<span>${escapeHtml(option)}</span>`).join("")}</div>
-          <p>Answer: ${escapeHtml(question.answer)}</p>
-          <button class="btn btn-danger danger-btn" data-delete-quiz="${escapeHtml(question.id)}">Delete</button>
-        </article>
-      `).join("")}
-    </div>
-  </section>
-`;
-
 
 const renderRedemptions = () => `
   <section class="page">
     ${sectionTitle("Redemption Requests", "Approve, reject, or mark item collection as completed.")}
     <div class="grid-3">
       ${state.redeemed.length === 0 ? "<p>No requests yet.</p>" : state.redeemed.map((item) => `
-        <article class="card h-100 shadow-sm">
+        <article class="card h-100 shadow-sm crud-card">
           <h2>${escapeHtml(item.item)}</h2>
           <p>${escapeHtml(item.user)} - ${escapeHtml(item.code)}</p>
-          <span class="badge">${escapeHtml(item.status)}</span>
-          <div class="row">
+          <span class="badge redemption-status ${String(item.status).toLowerCase()}">${escapeHtml(item.status)}</span>
+          <div class="row crud-actions">
             <button class="btn btn-success" data-redemption="${item.id}:Approved">Approve</button>
             <button class="btn btn-outline-danger" data-redemption="${item.id}:Rejected">Reject</button>
             <button class="btn btn-outline-success" data-redemption="${item.id}:Collected">Collected</button>
@@ -215,57 +349,82 @@ const renderRedemptions = () => `
   </section>
 `;
 
-const renderReports = () => `
-  <section class="page">
-    ${sectionTitle("Reports", "Recycling statistics, most used bin, top users, waste records, and reward usage.")}
-    <div class="grid-4">
-      ${stat("Total Rubbish Records", state.records.length)}
-      ${stat("Top Users", state.users.filter((user) => user.role === "user").length)}
-      ${stat("Most Used Bin", state.records[0]?.bin || state.bins[0].name)}
-      ${stat("Reward Usage", state.redeemed.length)}
-    </div>
-    <div class="panel card shadow-sm">
-      <h2>System Activity Chart</h2>
-      <canvas id="reportChart" height="120"></canvas>
-    </div>
-  </section>
-`;
+const renderReports = () => {
+  const testedRecords = state.records.filter((record) => record.locationVerified);
+  const correctDetections = testedRecords.filter((record) => record.status === "Valid").length;
+  const accuracy = testedRecords.length ? Math.round((correctDetections / testedRecords.length) * 100) : 0;
+  const totalError = testedRecords.reduce((sum, record) => sum + (record.detectionError || 0), 0);
+  const totalPenalties = state.records.filter((record) => record.points < 0).length;
+  const totalLearning = state.learningRecords.length;
+  const totalFeedback = state.feedback.length;
 
-const renderFeedbackAdmin = () => `
-  <section class="page">
-    ${sectionTitle("Feedback Management", "Reply to user reports and update issue status.")}
-    <div class="grid-3">
-      ${state.feedback.length === 0 ? "<p>No feedback yet.</p>" : state.feedback.map((item) => `
-        <article class="card h-100 shadow-sm">
-          <p class="eyebrow">Sent by</p>
-          <h2>${escapeHtml(item.user)}</h2>
-          <div class="mini-row">
-            <span>${escapeHtml(item.email)}</span>
-            <span>${item.userId ? `User ID ${escapeHtml(item.userId)}` : "Guest"}</span>
-          </div>
-          <p>${escapeHtml(item.issue)}</p>
-          <small>${escapeHtml(item.date)}</small>
-          <span class="badge">${escapeHtml(item.status)}</span>
-          <button class="btn btn-success" data-feedback="${item.id}">Mark Resolved</button>
-        </article>
-      `).join("")}
-    </div>
-  </section>
-`;
-
-const renderAnnouncement = () => `
-  <section class="page grid-2">
-    <img class="split-img" src="/images/recycle-rewards.png" alt="">
-    <div>
-      ${sectionTitle("Announcement", "Post campaign, reward, or bin maintenance notices here.")}
-      <ul class="lead">
-        <li>Recycle plastic this week for campaign points.</li>
-        <li>Cafeteria bin is under maintenance.</li>
-        <li>New rewards added monthly.</li>
-      </ul>
-    </div>
-  </section>
-`;
+  return `
+    <section class="page report-page" id="adminFullReport">
+      ${sectionTitle("Reports", "Recycling statistics, most used bin, top users, waste records, reward usage, and prototype detection accuracy.")}
+      <div class="crud-toolbar no-print">
+        <button class="btn btn-success primary-btn" data-action="export-report-pdf">Save as PDF</button>
+      </div>
+      <div class="grid-4">
+        ${stat("Total Rubbish Records", state.records.length)}
+        ${stat("Top Users", state.users.filter((user) => user.role === "user").length)}
+        ${stat("Most Used Bin", state.records[0]?.bin || state.bins[0].name)}
+        ${stat("Reward Usage", state.redeemed.length)}
+      </div>
+      <div class="grid-4">
+        ${stat("Accuracy", `${accuracy}%`)}
+        ${stat("Correct Detections", correctDetections)}
+        ${stat("Total Tests", testedRecords.length)}
+        ${stat("Detection Error", totalError)}
+      </div>
+      <div class="grid-4">
+        ${stat("Penalty Records", totalPenalties)}
+        ${stat("Learning Records", totalLearning)}
+        ${stat("Feedback Records", totalFeedback)}
+        ${stat("Redemption Records", state.redeemed.length)}
+      </div>
+      <div class="panel card shadow-sm">
+        <h2>System Activity Chart</h2>
+        <canvas id="reportChart" height="120"></canvas>
+      </div>
+      ${reportTable(
+    "Waste Records",
+    ["User", "Waste", "Detected Category", "Bin", "Points", "Status", "Date"],
+    state.records.map((record) => [
+      record.user,
+      record.waste,
+      record.detectedCategory || "",
+      record.bin,
+      record.points,
+      record.status,
+      record.date,
+    ])
+  )}
+      ${reportTable(
+    "Redemption Records",
+    ["User", "Item", "Points", "Status", "Code", "Date"],
+    state.redeemed.map((item) => [item.user, item.item, item.points, item.status, item.code, item.date])
+  )}
+      ${reportTable(
+    "Learning Records",
+    ["User", "Type", "Item", "Answer", "Correct Answer", "Score", "Date"],
+    state.learningRecords.map((item) => [
+      item.user,
+      item.type,
+      item.item,
+      item.answer,
+      item.correctAnswer,
+      `${item.score}/${item.total}`,
+      item.date,
+    ])
+  )}
+      ${reportTable(
+    "User Feedback",
+    ["User", "Email", "Issue", "Status", "Date"],
+    state.feedback.map((item) => [item.user, item.email, item.issue, item.status, item.date])
+  )}
+    </section>
+  `;
+};
 
 export const renderAdminPage = () => {
   if (state.page === "manage-qr") return renderQrManager();
@@ -273,13 +432,11 @@ export const renderAdminPage = () => {
   if (state.page === "bin-status") return renderBins({ admin: true });
   if (state.page === "waste-records") return recordsTable("All Waste Records", state.records);
   if (state.page === "manage-users" || state.page === "points-management") return renderManageUsers();
+  if (state.page === "manage-user-detail") return renderManageUserDetail();
   if (state.page === "penalty-management") return recordsTable("Penalty Management", state.records.filter((record) => record.points < 0));
   if (state.page === "manage-rewards") return renderManageRewards();
-  if (state.page === "manage-quiz") return renderManageQuiz();
   if (state.page === "redemptions") return renderRedemptions();
   if (state.page === "reports") return renderReports();
-  if (state.page === "feedback-admin") return renderFeedbackAdmin();
-  if (state.page === "announcement") return renderAnnouncement();
   if (state.page === "profile") return renderUserPage();
   return renderAdminDashboard();
 };
