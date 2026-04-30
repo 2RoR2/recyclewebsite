@@ -3,3 +3,4 @@ dist/
 ai/win-env/
 ai/__pycache__/
 ai/.venv/
+.vercel
