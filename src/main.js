@@ -3,7 +3,7 @@ import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import "leaflet/dist/leaflet.css";
 import "./index.css";
 import { Chart } from "chart.js/auto";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import L from "leaflet";
@@ -1437,10 +1437,20 @@ const startScanner = async () => {
   actions?.classList.remove("hidden");
   qrScanner = new Html5Qrcode("qrReader");
   const onScanSuccess = async (decodedText) => {
+    showToast("QR detected.");
     await stopScanner();
     handleQrScan(decodedText, { updateUrl: true });
   };
-  const scanConfig = { fps: 10, qrbox: { width: 240, height: 240 } };
+  const scanConfig = {
+    fps: 12,
+    aspectRatio: 1,
+    qrbox: (viewfinderWidth, viewfinderHeight) => {
+      const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.92);
+      return { width: size, height: size };
+    },
+    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+    rememberLastUsedCamera: true,
+  };
 
   try {
     await qrScanner.start(
