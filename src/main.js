@@ -673,22 +673,28 @@ const detectWasteWithAi = async (file) => {
   const formData = new FormData();
   formData.append("image", file);
 
-  try {
-    const response = await fetch("http://127.0.0.1:8000/detect-waste", { method: "POST", body: formData });
-    if (!response.ok) throw new Error("AI detector unavailable");
-    const result = await response.json();
-    if (!result?.category || !result?.label) throw new Error("Invalid AI detector result");
-    return result;
-  } catch {
+  const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+
+  if (isLocal) {
     try {
-      const response = await fetch("/api/detect-waste", { method: "POST", body: formData });
-      if (!response.ok) throw new Error("AI detector unavailable");
+      const response = await fetch("http://127.0.0.1:8000/detect-waste", { method: "POST", body: formData });
+      if (!response.ok) throw new Error("Local AI detector unavailable");
       const result = await response.json();
-      if (!result?.category || !result?.label) throw new Error("Invalid AI detector result");
+      if (!result?.category || !result?.label) throw new Error("Invalid local AI detector result");
       return result;
     } catch {
-      return localYoloFallback(file);
+      // Continue to Vercel API fallback.
     }
+  }
+
+  try {
+    const response = await fetch("/api/detect-waste", { method: "POST", body: formData });
+    if (!response.ok) throw new Error("Hosted AI detector unavailable");
+    const result = await response.json();
+    if (!result?.category || !result?.label) throw new Error("Invalid hosted AI detector result");
+    return result;
+  } catch {
+    return localYoloFallback(file);
   }
 };
 
