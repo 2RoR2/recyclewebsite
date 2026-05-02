@@ -1436,22 +1436,31 @@ const startScanner = async () => {
   actionStack?.classList.add("hidden");
   actions?.classList.remove("hidden");
   qrScanner = new Html5Qrcode("qrReader");
+  const onScanSuccess = async (decodedText) => {
+    await stopScanner();
+    handleQrScan(decodedText, { updateUrl: true });
+  };
+  const scanConfig = { fps: 10, qrbox: { width: 240, height: 240 } };
 
   try {
     await qrScanner.start(
       { facingMode: "environment" },
-      { fps: 10 },
-      async (decodedText) => {
-        await stopScanner();
-        handleQrScan(decodedText, { updateUrl: true });
-      }
+      scanConfig,
+      onScanSuccess
     );
   } catch {
-    reader.classList.add("hidden");
-    launcher?.classList.remove("hidden");
-    actionStack?.classList.remove("hidden");
-    actions?.classList.add("hidden");
-    showToast("Camera scanner could not start. Please allow camera access or use the scan button.");
+    try {
+      const cameras = await Html5Qrcode.getCameras();
+      if (!cameras?.length) throw new Error("No camera found");
+      await qrScanner.start(cameras[0].id, scanConfig, onScanSuccess);
+    } catch (error) {
+      reader.classList.add("hidden");
+      launcher?.classList.remove("hidden");
+      actionStack?.classList.remove("hidden");
+      actions?.classList.add("hidden");
+      const message = error?.message ? `Camera scanner could not start: ${error.message}` : "Camera scanner could not start. Please allow camera access.";
+      showToast(message);
+    }
   }
 };
 
