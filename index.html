@@ -2,12 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>EcoCycle Sarawak</title>
     <link rel="icon" href="/images/recycle-logo.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="theme-color" content="#0b0b0d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="EcoCycle" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="EcoCycle Sarawak" />
   </head>
   <body>
-    <div class="promo-bar">SMART RECYCLE REWARDS · SCAN BINS · LEARN SORTING · REDEEM ITEMS</div>
+    <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
     <nav class="site-nav navbar navbar-expand-lg shadow-sm">
       <button class="brand" data-page="home" aria-label="EcoCycle Sarawak home">
         <img src="/images/recycle-logo.png" alt="" />
@@ -19,6 +27,35 @@
 
     <div id="toast" class="toast hidden"></div>
     <main id="app"></main>
+    <button class="back-to-top" id="backToTop" data-action="back-to-top" type="button" aria-label="Back to top" title="Back to top">
+      <span aria-hidden="true">↑</span>
+    </button>
+    <footer class="site-footer">
+      <img class="footer-corner-image" src="/images/footer-image.png" alt="" aria-hidden="true" />
+      <div class="footer-brand">
+        <img src="/images/recycle-logo.png" alt="" />
+        <strong>EcoCycle Sarawak</strong>
+        <span>Smart sorting for a cleaner Sarawak.</span>
+      </div>
+      <div class="footer-links" aria-label="Quick links">
+        <strong>Quick Links</strong>
+        <button data-anchor="home">Home</button>
+        <button data-anchor="about">About Us</button>
+        <button data-anchor="points">Recycle Points</button>
+      </div>
+      <div class="footer-links" aria-label="Resources">
+        <strong>Resources</strong>
+        <button data-anchor="points">Waste Points</button>
+        <button data-anchor="campaigns">Campaigns</button>
+        <button data-page="news">News & Updates</button>
+      </div>
+      <div class="footer-links contact-list" aria-label="Contact">
+        <strong>Contact Us</strong>
+        <span>082-1234567</span>
+        <span>ecocyclesarawak@gmail.com</span>
+        <span>Kuching, Sarawak, Malaysia</span>
+      </div>
+    </footer>
 
     <script type="module" src="/src/main.js"></script>
   </body>

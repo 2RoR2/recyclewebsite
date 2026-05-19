@@ -1,0 +1,301 @@
+/* Responsive and mobile readability overrides */
+
+body {
+  min-height: 100vh;
+}
+
+.site-nav {
+  background: rgba(16, 37, 29, 0.96);
+}
+
+.site-footer strong,
+.site-footer span,
+.site-footer button {
+  color: #ffffff !important;
+}
+
+.hero-copy h1,
+.guest-page-hero h1,
+.support-hero h1,
+.guide-hero h1,
+.news-hero h1,
+.sarawak-hero h1 {
+  color: #ffffff !important;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55);
+}
+
+.hero-copy .lead,
+.guest-page-hero p,
+.support-hero p,
+.guide-hero p,
+.news-hero p,
+.sarawak-hero .lead {
+  color: #f8f9ee !important;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+.page {
+  padding-inline: clamp(1rem, 4vw, 2rem);
+}
+
+@media (max-width: 980px) {
+  .hero-copy,
+  .sarawak-hero-copy,
+  .guest-page-hero,
+  .guide-hero,
+  .support-hero,
+  .news-hero {
+    padding: 2rem 1rem;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+  }
+
+  .nav-links,
+  .nav-actions {
+    width: 100%;
+  }
+
+  .nav-links button,
+  .nav-menu-toggle,
+  .install-nav-btn,
+  .account-chip {
+    min-height: 44px;
+    font-size: 0.95rem;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  table {
+    min-width: 100%;
+  }
+
+  th,
+  td {
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .footer-links {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .site-footer {
+    padding: 2rem 1rem 2.5rem;
+  }
+
+  .section-title h1,
+  .dashboard-header h1,
+  .faq-question,
+  .support-card h3,
+  .contact-card p,
+  .support-topic-grid h3 {
+    color: #10251d !important;
+  }
+
+  .support-card,
+  .contact-card,
+  .guide-book-index,
+  .support-source-band,
+  .support-topic-grid article {
+    background: #ffffff;
+  }
+
+  .support-contact-form label,
+  .support-topic-grid p,
+  .faq-answer p,
+  .station-bin span,
+  .station-bin small,
+  .station-note,
+  .profile-field,
+  .contact-card p {
+    color: #2e3d31 !important;
+  }
+
+  .guide-book-section,
+  .guide-source-band,
+  .support-command-layout,
+  .support-topic-grid,
+  .support-source-band {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .guide-flipbook {
+    max-width: 100%;
+    margin-inline: 0;
+  }
+
+  .guide-flipbook-stage {
+    width: 100%;
+  }
+}
+
+@media (max-width: 680px) {
+  .site-nav {
+    padding: 0.85rem 0.85rem;
+  }
+
+  .site-nav .brand {
+    width: 100%;
+    font-size: 1.05rem;
+  }
+
+  .hero-copy h1,
+  .sarawak-hero h1,
+  .guest-page-hero h1,
+  .support-hero h1 {
+    font-size: clamp(2rem, 8vw, 3.2rem);
+  }
+
+  .footer-links {
+    margin-top: 1rem;
+  }
+
+  .footer-brand,
+  .footer-links {
+    width: 100%;
+  }
+}
+
+@media (max-width: 900px) {
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .site-nav {
+    align-items: flex-start;
+    padding: 0.9rem 1rem;
+  }
+
+  .nav-links {
+    position: relative;
+    width: 100%;
+  }
+
+  .nav-links .dropdown {
+    width: 100%;
+  }
+
+  .nav-links .dropdown-menu {
+    position: absolute !important;
+    top: calc(100% + 0.35rem);
+    left: 0;
+    right: 0;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.14);
+    border-radius: 0.8rem;
+    border: 1px solid rgba(216, 245, 200, 0.18);
+    background: rgba(16, 37, 29, 0.98);
+    padding: 0.5rem 0.35rem;
+    z-index: 3200;
+  }
+
+  .nav-links .dropdown-menu.show {
+    display: block !important;
+  }
+
+  .nav-links .dropdown-item {
+    margin: 0;
+    padding: 0.95rem 1rem;
+    font-size: 1rem;
+    border-radius: 0.75rem;
+    color: #f4ffe8 !important;
+  }
+
+  .nav-links .dropdown-item + .dropdown-item {
+    margin-top: 0.35rem;
+  }
+
+  .nav-links .dropdown-item.active,
+  .nav-links .dropdown-item:hover {
+    background: rgba(216, 245, 200, 0.18);
+    color: #d8f5c8 !important;
+  }
+
+  .nav-menu-toggle {
+    min-width: 56px;
+    min-height: 56px;
+    padding: 0;
+    font-size: 1.5rem;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hero-actions .btn,
+  .hero-actions .primary-btn,
+  .hero-actions .text-btn,
+  .join-now-btn {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .hero-copy h1,
+  .sarawak-hero h1,
+  .guest-page-hero h1,
+  .support-hero h1 {
+    font-size: clamp(2.6rem, 8vw, 3.6rem);
+  }
+
+  .hero-copy .lead,
+  .support-hero p,
+  .guest-page-hero p,
+  .guide-hero p {
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .sarawak-hero {
+    min-height: calc(100vh - var(--nav-offset));
+    padding: 0;
+  }
+
+  .sarawak-hero-bg {
+    inset: var(--nav-offset) 0 0;
+  }
+
+  .sarawak-hero-bg iframe,
+  .sarawak-hero-bg video {
+    width: 100vw;
+    height: calc(100vh - var(--nav-offset));
+    top: 0;
+    left: 0;
+    transform: none;
+    opacity: 0.95;
+  }
+
+  .sarawak-hero-copy {
+    position: relative;
+    z-index: 4;
+    width: 100%;
+    padding: 1rem 1.2rem 2rem;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(10px);
+  }
+
+  .sarawak-hero-video-mask {
+    background: linear-gradient(180deg, rgba(11, 11, 13, 0.45), rgba(11, 11, 13, 0.45));
+  }
+}
+

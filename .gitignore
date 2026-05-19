@@ -1,6 +1,11 @@
 node_modules/
 dist/
 ai/win-env/
+ai/train-env/
 ai/__pycache__/
 ai/.venv/
 .vercel
+firebase-service-account*.json
+serviceAccountKey*.json
+.env
+.env.local

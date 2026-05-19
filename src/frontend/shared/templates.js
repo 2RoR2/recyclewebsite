@@ -9,6 +9,9 @@ export const escapeHtml = (value) =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 
+const stationDirectionsUrl = (station) =>
+  `https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`;
+
 export const sectionTitle = (title, text = "") => `
   <div class="section-title mb-4">
     <p class="eyebrow">EcoCycle Sarawak</p>
@@ -28,6 +31,15 @@ export const actions = (items) => `
   <div class="action-grid">${items.map(([page, label]) => `<button data-page="${page}">${label}</button>`).join("")}</div>
 `;
 
+const averageCoordinate = (bins, key, fallback) => {
+  const values = bins
+    .map((bin) => Number(bin[key]))
+    .filter(Number.isFinite);
+
+  if (values.length === 0) return fallback;
+  return values.reduce((total, value) => total + value, 0) / values.length;
+};
+
 export const binStations = () =>
   Object.values(
     state.bins.reduce((stations, bin) => {
@@ -46,12 +58,18 @@ export const binStations = () =>
       stations[key].bins.push(bin);
       return stations;
     }, {})
-  ).map((station) => ({
-    ...station,
-    bins: ["Plastic", "Paper", "General Waste"]
+  ).map((station) => {
+    const bins = ["Paper", "Plastic", "Aluminium", "General Waste"]
       .map((type) => station.bins.find((bin) => bin.accepts === type))
-      .filter(Boolean),
-  }));
+      .filter(Boolean);
+
+    return {
+      ...station,
+      lat: averageCoordinate(station.bins, "lat", station.lat),
+      lng: averageCoordinate(station.bins, "lng", station.lng),
+      bins,
+    };
+  });
 
 export const recordsTable = (title, records, embedded = false) => `
   ${(() => {
@@ -108,18 +126,18 @@ export const renderEducation = (wasteGuide) => `
       {
         title: "Waste Sorting Basics",
         embedUrl: "https://www.youtube-nocookie.com/embed/6jQ7y_qQYUA",
-        description: "Simple guide to separate recyclable and general waste correctly.",
+        description: "Simple guide to separate paper, plastic, aluminium, and general waste correctly.",
       },
     ];
 
     return `
   <section class="page education-page">
-    ${sectionTitle("Waste Education Guide", "Each EcoCycle station has Plastic, Paper, and General Waste bins. Learn the category before you scan to avoid penalties.")}
-    <div class="education-grid">
+    ${sectionTitle("Waste Education Guide", "Each EcoCycle station has Paper, Plastic, Aluminium, and General Waste bins. Learn the category before you scan.")}
+    <div class="education-mosaic-grid education-grid">
       ${filteredGuide
         .map(
-          ([type, example, tip]) => `
-          <article class="card h-100 shadow-sm education-card">
+          ([type, example, tip], index) => `
+          <article class="card h-100 shadow-sm education-card mosaic-tile mosaic-waste-tile tile-${index + 1}">
             <span class="pill">${escapeHtml(type)}</span>
             <h2>${escapeHtml(example)}</h2>
             <p>${escapeHtml(tip)}</p>
@@ -128,17 +146,17 @@ export const renderEducation = (wasteGuide) => `
         )
         .join("")}
     </div>
-    <section class="education-video-shell">
-      <div class="section-title mb-0">
+    <section class="education-video-shell education-mosaic-section">
+      <div class="mosaic-section-head">
         <p class="eyebrow">Video Learning</p>
         <h2>Watch Before You Scan</h2>
-        <p class="lead">Short videos to help you sort faster and avoid wrong-bin penalties.</p>
+        <p class="lead">Short videos to help you sort faster and choose the right bin.</p>
       </div>
-      <div class="education-video-grid">
+      <div class="education-video-grid education-video-mosaic">
         ${educationVideos
           .map(
-            (video) => `
-          <article class="card h-100 shadow-sm education-video-card">
+            (video, index) => `
+          <article class="card h-100 shadow-sm education-video-card mosaic-video-card video-${index + 1}">
             <div class="education-video-frame">
               <iframe
                 src="${escapeHtml(video.embedUrl)}"
@@ -157,20 +175,21 @@ export const renderEducation = (wasteGuide) => `
           .join("")}
       </div>
     </section>
-    <section class="education-video-shell">
-      <div class="section-title mb-0">
+    <section class="education-video-shell education-mosaic-section">
+      <div class="mosaic-section-head">
         <p class="eyebrow">More Resources</p>
         <h2>Learn From Trusted Guides</h2>
         <p class="lead">Extra reading and references for better waste sorting habits.</p>
       </div>
-      <div class="education-video-grid">
+      <div class="education-resource-mosaic education-video-grid">
         ${[
           ["Malaysia Recycling Guide", "https://www.swcorp.gov.my/"],
-          ["WWF Recycling Tips", "https://www.wwf.org.uk/thingsyoucando/recycle"],
-          ["UNEP Waste Management", "https://www.unep.org/"],
-          ["Earth911 Search Tool", "https://search.earth911.com/"],
-        ].map(([label, href]) => `
-          <article class="card h-100 shadow-sm education-video-card resource-card">
+          ["Council of the Kuching South", "https://mbks.sarawak.gov.my/web/subpage/webpage_view/178"],
+          ["Commission of the City of Kuching North", "https://dbku.sarawak.gov.my/page-225-293-318-tid.html"],
+          ["World Wildlife Fund", "https://assets.worldwildlife.org/www-prd/documents/8xmq9zvpsz_Reducing_Waste_Guide_1.25.22.pdf"],
+          ["Zero Waste Malaysia", "https://trashpedia.zerowastemalaysia.org/en/faq/"],
+        ].map(([label, href], index) => `
+          <article class="card h-100 shadow-sm education-video-card resource-card mosaic-resource-card resource-${index + 1}">
             <h3>${escapeHtml(label)}</h3>
             <p>Open this guide for disposal tips, sorting standards, and recycling best practices.</p>
             <a class="btn btn-outline-success ghost-btn" href="${escapeHtml(href)}" target="_blank" rel="noreferrer">Open Resource</a>
@@ -181,9 +200,9 @@ export const renderEducation = (wasteGuide) => `
     <div class="panel card shadow-sm education-note">
       <div>
         <p class="eyebrow">Why penalties exist</p>
-        <h2>Wrong bins reduce recycling quality</h2>
+        <h2>Vandalism of recycling bins is a serious offense</h2>
       </div>
-      <p class="lead">If a user records the wrong bin or an invalid action, the system can deduct points. This keeps the reward system fair and teaches better disposal habits.</p>
+      <p class="lead">If a user throws rubbish into the wrong recycling bin, the smart bin alarm system will automatically alert them and guide them to use the correct bin. However, vandalizing public or council recycling bins in Kuching is a serious offense. Offenders may face compounds of up to RM2,000, mandatory community service, or imprisonment of up to 5 years under the Penal Code.</p>
       <button class="btn btn-success" data-page="${role() === "user" ? "scan" : "public-bins"}">${role() === "user" ? "Scan a Bin" : "View Bin Locations"}</button>
     </div>
   </section>
@@ -191,20 +210,193 @@ export const renderEducation = (wasteGuide) => `
   })()}
 `;
 
+export const renderLocationPage = () => {
+  const stations = binStations();
+  return `
+  <section class="page location-page">
+    ${sectionTitle("Nearby Smart Bins", "Browse nearby EcoCycle stations with bin details and directions.")}
+    <div class="grid-3 station-overview-grid">
+      ${stations.map((station, index) => `
+        <article class="card h-100 shadow-sm station-card">
+          <p class="eyebrow">Station ${index + 1}</p>
+          <h2>${escapeHtml(station.name)}</h2>
+          <p>${escapeHtml(station.location)}</p>
+          <div class="station-bin-set">
+            ${station.bins
+              .map((bin) => `
+                <div class="station-bin ${bin.accepts.toLowerCase()}">
+                  <strong>${escapeHtml(bin.accepts)}</strong>
+                  <b class="badge ${bin.status.toLowerCase()}">${escapeHtml(bin.status)}</b>
+                </div>
+              `)
+              .join("")}
+          </div>
+          <a class="btn btn-outline-success ghost-btn map-link" href="${stationDirectionsUrl(station)}" target="_blank" rel="noreferrer">Open Directions</a>
+        </article>
+      `).join("")}
+    </div>
+  </section>
+`;
+};
+
+export const renderMapPage = () => {
+  const stations = binStations();
+  return `
+  <section class="page map-page">
+    ${sectionTitle("Smart Bin Map", "Interactive map with GPS tracking and live EcoCycle station points.")}
+    <div class="map-layout">
+      <div class="user-map-showcase panel shadow-sm">
+        <div class="user-map-top">
+          <div>
+            <p class="eyebrow">Live Stations</p>
+            <h2>Find your closest bins</h2>
+          </div>
+          <span>GPS auto</span>
+        </div>
+        <div class="creative-map-wrap">
+          <div class="leaflet-map" id="binMap"></div>
+        </div>
+        <div class="map-legend-row" aria-label="Map legend">
+          <span><b class="available-dot"></b>Available</span>
+          <span><b class="busy-dot"></b>Check status</span>
+          <span><b class="gps-dot"></b>Your GPS</span>
+        </div>
+      </div>
+      <aside class="station-list-panel panel shadow-sm">
+        <p class="eyebrow">Station details</p>
+        <div class="station-mini-list">
+          ${stations
+            .map((station, index) => `
+              <button type="button" class="station-list-item" data-map-station="${escapeHtml(station.code)}" aria-label="Show ${escapeHtml(station.name)} on map">
+                <span>${index + 1}</span>
+                <strong>${escapeHtml(station.name)}</strong>
+                <small>${escapeHtml(station.location)}</small>
+              </button>
+            `)
+            .join("")}
+        </div>
+      </aside>
+    </div>
+  </section>
+`;
+};
+
+export const renderScanPage = () => {
+  return `
+  <section class="page scan-page">
+    <article class="card h-100 shadow-sm scan-control-card">
+      <div class="scanner-copy">
+        <p class="eyebrow">Location QR</p>
+        <h2>QR Scan Checkpoint</h2>
+        <p>Scan any station QR code first. EcoCycle will verify your GPS and prepare AI waste detection.</p>
+      </div>
+      <div class="scan-steps" aria-label="QR scan flow">
+        <span><b>1</b> Open camera</span>
+        <span><b>2</b> Align QR in frame</span>
+        <span><b>3</b> Auto detect GPS</span>
+      </div>
+      <div class="scanner-visual-row scanner-visual-panel">
+        <div class="scanner-action-stack">
+          <button class="scanner-launch" id="scannerLaunch" data-action="start-scanner" aria-label="Open camera QR scanner" title="Open camera QR scanner">
+            <span class="qr-scan-frame" aria-hidden="true">
+              <span class="qr-corner top-left"></span>
+              <span class="qr-corner top-right"></span>
+              <span class="qr-corner bottom-left"></span>
+              <span class="qr-corner bottom-right"></span>
+              <span class="scanner-ring"><img src="/images/qrscan.png" alt=""></span>
+              <span class="scan-line"></span>
+            </span>
+            <strong>Scan QR</strong>
+            <small>Point your camera at a station code</small>
+          </button>
+          <div class="qr-helper-row" aria-label="Scanner requirements">
+            <span>GPS required</span>
+            <span>Camera ready</span>
+            <span>Auto detect</span>
+          </div>
+        </div>
+        <div id="qrReader" class="qr-reader hidden"></div>
+      </div>
+      <div class="scanner-actions hidden" id="scannerActions">
+        <button class="icon-btn scanner-icon stop" data-action="stop-scanner" aria-label="Stop QR scanner" title="Stop QR scanner">
+          <span aria-hidden="true">x</span>
+        </button>
+      </div>
+    </article>
+  </section>
+`;
+};
+
 export const renderBins = ({ guest = false, admin = false } = {}) => `
   ${(() => {
     const stationDirectionsUrl = (station) =>
       `https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`;
     const filteredStations = binStations();
+    const featuredStation = filteredStations[0];
+    const stationList = filteredStations.slice(0, 4);
     return `
   <section class="page">
-    ${sectionTitle(guest ? "Public Bin Location" : admin ? "Bin Status" : "Scan QR Page", guest ? "Each location has Plastic, Paper, and General Waste smart bins." : "Scan the QR code at the location. The QR identifies the station before GPS and AI detection.")}
+    ${sectionTitle(guest ? "Public Bin Location" : admin ? "Bin Status" : "Scan QR Page", guest ? "Each location has Paper, Plastic, Aluminium, and General Waste smart bins." : "Scan the QR code. EcoCycle will automatically use your current GPS location before AI detection.")}
+    ${!guest && !admin ? `
+      <section class="bins-bento-hero">
+        <div>
+          <p class="eyebrow">Smart Station Scanner</p>
+          <h2>Scan QR. Recycle smarter. <span>Protect Sarawak.</span></h2>
+          <p>Scan the QR code at any EcoCycle station. We automatically detect your current location and guide you through AI waste detection.</p>
+          <div class="bento-hero-steps">
+            <span><b>1</b>Scan QR</span>
+            <span><b>2</b>Detect Waste</span>
+            <span><b>3</b>Verify Location</span>
+            <span><b>4</b>Earn Rewards</span>
+          </div>
+        </div>
+        <div class="bento-hero-art" aria-hidden="true">
+          <div class="bento-bin-3d"></div>
+          <div class="bento-recycle-badge"><strong>12</strong><span>scans</span></div>
+        </div>
+      </section>
+    ` : ""}
     <div class="${!guest && !admin ? "scan-page-shell" : "map-layout"}">
       <div class="scan-map-panel">
-        <div class="leaflet-map panel shadow-sm" id="binMap"></div>
+        <div class="user-map-showcase panel shadow-sm">
+          <div class="user-map-top">
+            <div>
+              <p class="eyebrow">Live Station Map</p>
+              <h2>Recycle points near you</h2>
+            </div>
+            <span>GPS auto</span>
+          </div>
+          <div class="creative-map-wrap">
+            <div class="leaflet-map" id="binMap"></div>
+            <div class="map-energy-route" aria-hidden="true"></div>
+            <div class="map-orbit one" aria-hidden="true"></div>
+            <div class="map-orbit two" aria-hidden="true"></div>
+            <div class="map-pulse-pin pin-a" aria-hidden="true"></div>
+            <div class="map-pulse-pin pin-b" aria-hidden="true"></div>
+            <div class="map-pulse-pin pin-c" aria-hidden="true"></div>
+          </div>
+          <div class="map-legend-row" aria-label="Map legend">
+            <span><b class="available-dot"></b>Available</span>
+            <span><b class="busy-dot"></b>Check status</span>
+            <span><b class="gps-dot"></b>Your GPS</span>
+          </div>
+          ${!guest && !admin ? `
+            <div class="station-mini-list">
+              ${stationList.map((station, index) => `
+                <button data-scan="${escapeHtml(station.code)}">
+                  <span>${index + 1}</span>
+                  <strong>${escapeHtml(station.name)}</strong>
+                  <small>${(index + 1) * 1.6} km</small>
+                  <b>${station.bins.some((bin) => bin.status !== "Available") ? "Check" : "Available"}</b>
+                </button>
+              `).join("")}
+            </div>
+            <button class="view-stations-btn" data-page="locations">View All Stations</button>
+          ` : ""}
+        </div>
         ${!guest && !admin ? `
           <div class="scan-status-strip">
-            <div><strong>6</strong><span>Stations</span></div>
+            <div><strong>${filteredStations.length}</strong><span>Stations</span></div>
             <div><strong>GPS</strong><span>Auto detect</span></div>
             <div><strong>Live</strong><span>Camera ready</span></div>
             <div><strong>Live</strong><span>Status</span></div>
@@ -217,21 +409,32 @@ export const renderBins = ({ guest = false, admin = false } = {}) => `
             <div class="scanner-copy">
               <p class="eyebrow">Location QR</p>
               <h2>QR Scan Checkpoint</h2>
-              <p>Scan the station QR first. Then EcoCycle confirms GPS and starts AI waste detection for the correct bin flow.</p>
+              <p>Scan any station QR first. EcoCycle automatically detects your current location and prepares the AI waste detection flow.</p>
             </div>
             <div class="scan-steps" aria-label="QR scan flow">
               <span><b>1</b> Open camera</span>
               <span><b>2</b> Align QR in frame</span>
-              <span><b>3</b> Auto verify location</span>
+              <span><b>3</b> Auto detect GPS</span>
             </div>
             <div class="scanner-visual-row scanner-visual-panel">
               <div class="scanner-action-stack">
                 <button class="scanner-launch" id="scannerLaunch" data-action="start-scanner" aria-label="Open camera QR scanner" title="Open camera QR scanner">
-                  <span class="scanner-ring" aria-hidden="true"><img src="/images/qrscan.png" alt=""></span>
-                  <strong>Start Scan</strong>
-                  <small>Camera permission required</small>
+                  <span class="qr-scan-frame" aria-hidden="true">
+                    <span class="qr-corner top-left"></span>
+                    <span class="qr-corner top-right"></span>
+                    <span class="qr-corner bottom-left"></span>
+                    <span class="qr-corner bottom-right"></span>
+                    <span class="scanner-ring"><img src="/images/qrscan.png" alt=""></span>
+                    <span class="scan-line"></span>
+                  </span>
+                  <strong>Scan QR</strong>
+                  <small>Point your camera at any station code</small>
                 </button>
-                <button class="btn btn-outline-success ghost-btn" data-action="set-demo-location">Use My Current Location (Demo)</button>
+                <div class="qr-helper-row" aria-label="Scanner requirements">
+                  <span>GPS required</span>
+                  <span>Camera ready</span>
+                  <span>Auto detect</span>
+                </div>
               </div>
               <div id="qrReader" class="qr-reader hidden"></div>
             </div>
@@ -241,6 +444,22 @@ export const renderBins = ({ guest = false, admin = false } = {}) => `
               </button>
             </div>
           </article>
+          <aside class="bento-side-panel">
+            <article class="station-feature-card">
+              <p class="eyebrow">Smart Bin Station</p>
+              <h2>${escapeHtml(featuredStation?.name || "EcoCycle Station")}</h2>
+              <p>${escapeHtml(featuredStation?.location || "Kuching, Sarawak")}</p>
+              <span class="badge available">Online</span>
+              <div class="station-bin-visual" aria-hidden="true"></div>
+              <div class="capacity-ring"><strong>65%</strong><span>Capacity Used</span></div>
+              <a class="primary-btn map-link" href="${featuredStation ? stationDirectionsUrl(featuredStation) : "#"}" target="_blank" rel="noreferrer">Open Directions -&gt;</a>
+            </article>
+            <article class="reward-card">
+              <p class="eyebrow">Earn Rewards</p>
+              <h2>Recycle more, earn more points.</h2>
+              <button class="primary-btn" data-page="rewards">View Rewards -&gt;</button>
+            </article>
+          </aside>
         ` : ""}
         ${filteredStations.map((station) => `
           <article class="card h-100 shadow-sm station-card scan-station-card">
@@ -276,6 +495,47 @@ export const renderBins = ({ guest = false, admin = false } = {}) => `
         ` : ""}
       </div>
     </div>
+    ${!guest && !admin ? `
+      <section class="bento-status-strip">
+        <article><span>${filteredStations.length}</span><strong>Total Stations</strong></article>
+        <article><span>GPS</span><strong>Auto Detect</strong></article>
+        <article><span>Live</span><strong>Camera Ready</strong></article>
+        <article><span>AI</span><strong>Detection Active</strong></article>
+        <article><span>98%</span><strong>System Uptime</strong></article>
+      </section>
+      <section class="bento-waste-row">
+        <article>
+          <img src="/images/recycle-flow.png" alt="">
+          <div><h3>Paper</h3><p>Newspaper, boxes, magazines.</p><span>Available</span></div>
+        </article>
+        <article>
+          <img src="/images/recycle_bin.jpg" alt="">
+          <div><h3>Plastic</h3><p>Bottles, containers, packaging.</p><span>Available</span></div>
+        </article>
+        <article>
+          <img src="/images/recycle-rewards.png" alt="">
+          <div><h3>Aluminium</h3><p>Aluminium cans and beverage tins.</p><span>Available</span></div>
+        </article>
+        <article>
+          <img src="/images/recycle-tree.png" alt="">
+          <div><h3>General Waste</h3><p>Wrappers, tissues, contaminated items.</p><span>Available</span></div>
+        </article>
+        <article class="reward-bento">
+          <div><h3>Earn Rewards</h3><p>Recycle more, earn more points.</p><button data-page="rewards">View Rewards -&gt;</button></div>
+        </article>
+      </section>
+      <section class="bento-how-row">
+        ${[
+          ["1", "Scan QR Code", "Scan the QR code at any station."],
+          ["2", "Verify Location", "We check your GPS location."],
+          ["3", "AI Detects Waste", "Our AI detects the waste type."],
+          ["4", "Dispose Waste", "Put your waste in the smart bin."],
+          ["5", "Earn Points", "You earn points and save the planet."],
+        ].map(([number, title, text]) => `
+          <article><span>${number}</span><div><strong>${title}</strong><p>${text}</p></div></article>
+        `).join("")}
+      </section>
+    ` : ""}
   </section>
 `;
   })()}
@@ -284,11 +544,13 @@ export const renderBins = ({ guest = false, admin = false } = {}) => `
 const rewardImage = (reward) => {
   if (reward.image) return reward.image;
   const name = reward.name.toLowerCase();
-  if (name.includes("rm5")) return "reoladpinRM5.png";
+  if (name.includes("rm5")) return "reloadpinRM5.png";
   if (name.includes("rm10")) return "reloadpinRM10.png";
   if (name.includes("rm30")) return "reloadpinRM30.png";
-  if (name.includes("electricity")) return "electricalbill.png";
-  if (name.includes("water")) return "waterbill.png";
+  if (name.includes("electricity")) return "electricalbill.jpeg";
+  if (name.includes("water")) return "waterbill.jpeg";
+  if (name.includes("emart")) return "emart.jpeg";
+  if (name.includes("rainforest")) return "rainforest.jpeg";
   return "reloadpinRM10.png";
 };
 
@@ -338,4 +600,3 @@ export const renderNotFound = () => `
     </div>
   </section>
 `;
-

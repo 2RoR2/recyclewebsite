@@ -3,11 +3,23 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, resolve } from "node:path";
+import process from "node:process";
 
 const port = Number(process.env.PORT || 3000);
 const distDir = resolve("dist");
 const secret = process.env.JWT_SECRET || "dev-smart-recycle-secret-change-me";
 const cookieName = "sr_session";
+const startedAt = new Date().toISOString();
+const appVersion = process.env.npm_package_version || "0.0.0";
+const isProduction = process.env.NODE_ENV === "production";
+const maxBodyBytes = Number(process.env.MAX_BODY_BYTES || 32_768);
+const rateLimitWindowMs = Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000);
+const rateLimitMax = Number(process.env.RATE_LIMIT_MAX || 120);
+const rateLimitStore = new Map();
+
+if (isProduction && secret === "dev-smart-recycle-secret-change-me") {
+  throw new Error("JWT_SECRET must be set before starting the production server.");
+}
 
 const users = [
   { id: 1, name: "Aina", email: "user@demo.com", password: "123456", role: "user" },
@@ -24,6 +36,19 @@ const mimeTypes = {
   ".jpeg": "image/jpeg",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
+  ".woff2": "font/woff2",
+  ".otf": "font/otf",
+};
+
+const routeCategories = ["Paper", "Plastic", "Aluminium Can", "General Waste"];
+
+const securityHeaders = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(self), geolocation=(self)",
+  "Cross-Origin-Opener-Policy": "same-origin",
 };
 
 const base64url = (value) => Buffer.from(value).toString("base64url");
@@ -57,15 +82,63 @@ const parseCookies = (cookieHeader = "") =>
     return [key, decodeURIComponent(value.join("="))];
   }));
 
+const clientIp = (req) =>
+  String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+
+const checkRateLimit = (req) => {
+  const key = `${clientIp(req)}:${req.url?.split("?")[0] || "/"}`;
+  const now = Date.now();
+  const current = rateLimitStore.get(key);
+
+  if (!current || current.resetAt <= now) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + rateLimitWindowMs });
+    return { ok: true };
+  }
+
+  current.count += 1;
+  if (current.count > rateLimitMax) {
+    return { ok: false, retryAfter: Math.ceil((current.resetAt - now) / 1000) };
+  }
+
+  return { ok: true };
+};
+
+const cleanRateLimitStore = () => {
+  const now = Date.now();
+  for (const [key, value] of rateLimitStore.entries()) {
+    if (value.resetAt <= now) rateLimitStore.delete(key);
+  }
+};
+
 const sendJson = (res, status, data, headers = {}) => {
-  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", ...headers });
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    ...headers,
+  });
   res.end(JSON.stringify(data));
 };
 
 const readBody = async (req) => {
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+  let receivedBytes = 0;
+  for await (const chunk of req) {
+    receivedBytes += chunk.length;
+    if (receivedBytes > maxBodyBytes) {
+      const error = new Error("Request body is too large.");
+      error.statusCode = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
+
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+  } catch {
+    const error = new Error("Request body must be valid JSON.");
+    error.statusCode = 400;
+    throw error;
+  }
 };
 
 const cookieOptions = () => [
@@ -73,12 +146,41 @@ const cookieOptions = () => [
   "SameSite=Lax",
   "Path=/",
   "Max-Age=28800",
-  process.env.NODE_ENV === "production" ? "Secure" : "",
+  isProduction ? "Secure" : "",
 ].filter(Boolean).join("; ");
 
 const handleApi = async (req, res, url) => {
+  const rateLimit = checkRateLimit(req);
+  if (!rateLimit.ok) {
+    return sendJson(res, 429, { ok: false, message: "Too many requests. Please try again shortly." }, {
+      "Retry-After": String(rateLimit.retryAfter),
+    });
+  }
+
+  if (url.pathname === "/api/health" && req.method === "GET") {
+    return sendJson(res, 200, {
+      ok: true,
+      name: "EcoCycle Sarawak",
+      version: appVersion,
+      uptimeSeconds: Math.round(process.uptime()),
+      startedAt,
+      environment: isProduction ? "production" : "development",
+      categories: routeCategories,
+    });
+  }
+
+  if (url.pathname === "/api/config" && req.method === "GET") {
+    return sendJson(res, 200, {
+      ok: true,
+      appName: "EcoCycle Sarawak",
+      categories: routeCategories,
+      pwa: true,
+      features: ["qr-scanning", "gps-verification", "ai-detection", "rewards", "admin-dashboard"],
+    });
+  }
+
   if (url.pathname === "/api/login" && req.method === "POST") {
-    const { email, password } = await readBody(req);
+    const { email = "", password = "" } = await readBody(req);
     const user = users.find((item) => item.email === email && item.password === password);
     if (!user) return sendJson(res, 401, { ok: false, message: "Invalid login." });
 
@@ -117,20 +219,41 @@ const serveFile = async (res, url) => {
   }
 
   const ext = extname(filePath);
+  const immutableAsset = /\/assets\/.+-[A-Za-z0-9_-]{8,}\./.test(filePath.replaceAll("\\", "/"));
   res.setHeader("Content-Type", mimeTypes[ext] || "application/octet-stream");
+  res.setHeader("Cache-Control", ext === ".html"
+    ? "no-cache"
+    : immutableAsset
+      ? "public, max-age=31536000, immutable"
+      : "public, max-age=3600");
   createReadStream(filePath).pipe(res);
 };
 
 createServer(async (req, res) => {
   try {
+    Object.entries(securityHeaders).forEach(([header, value]) => res.setHeader(header, value));
+
+    if (!["GET", "HEAD", "POST", "OPTIONS"].includes(req.method || "")) {
+      res.writeHead(405, { Allow: "GET, HEAD, POST, OPTIONS" });
+      return res.end("Method not allowed");
+    }
+
     const url = new URL(req.url, `http://${req.headers.host}`);
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      return res.end();
+    }
     if (url.pathname.startsWith("/api/")) return await handleApi(req, res, url);
     if (!existsSync(join(distDir, "index.html"))) {
       res.writeHead(503, { "Content-Type": "text/plain; charset=utf-8" });
       return res.end("Build not found. Run npm run build first.");
     }
     return await serveFile(res, url);
-  } catch {
+  } catch (error) {
+    if (error.statusCode) {
+      return sendJson(res, error.statusCode, { ok: false, message: error.message });
+    }
+
     const fallback = existsSync(join(distDir, "index.html"))
       ? await readFile(join(distDir, "index.html"), "utf8")
       : "Server error";
@@ -140,3 +263,5 @@ createServer(async (req, res) => {
 }).listen(port, () => {
   console.log(`Smart Recycle server running on http://localhost:${port}`);
 });
+
+setInterval(cleanRateLimitStore, rateLimitWindowMs).unref();

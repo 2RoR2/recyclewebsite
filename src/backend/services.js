@@ -11,9 +11,12 @@ export const userLearningRecords = () => state.learningRecords.filter((item) => 
 const nowLabel = () =>
   new Intl.DateTimeFormat("en-MY", { dateStyle: "medium", timeStyle: "short" }).format(new Date());
 
+const binZoneCategories = ["Paper", "Plastic", "Aluminium", "General Waste"];
+
 export const wasteCategory = (wasteType) => {
-  if (wasteType === "Plastic") return "Plastic";
   if (wasteType === "Paper") return "Paper";
+  if (wasteType === "Plastic") return "Plastic";
+  if (wasteType === "Aluminium" || wasteType === "Aluminium Can") return "Aluminium";
   return "General Waste";
 };
 
@@ -26,7 +29,7 @@ const isStrongPassword = (password) =>
 
 const continueToPendingBin = (fallbackPage) => {
   if (state.pendingStationCode) {
-    const stationBin = state.bins.find((bin) => bin.qrCode?.startsWith(`${state.pendingStationCode}-`) && bin.accepts === "Plastic")
+    const stationBin = state.bins.find((bin) => bin.qrCode?.startsWith(`${state.pendingStationCode}-`) && bin.accepts === "Paper")
       || state.bins.find((bin) => bin.qrCode?.startsWith(`${state.pendingStationCode}-`));
     if (stationBin) {
       state.selectedBinId = stationBin.id;
@@ -61,7 +64,7 @@ export const authService = {
     const password = formData.get("password");
     const found = state.users.find((user) => user.email === email && user.password === password);
 
-    if (!found) return { ok: false, message: "Login failed. Try user@demo.com / 123456 or admin@demo.com / admin123." };
+    if (!found) return { ok: false, message: "Unable to submit. Please check your email and password." };
 
     state.currentUserId = found.id;
     state.form = { name: "", email: "", password: "", issue: "" };
@@ -76,12 +79,12 @@ export const authService = {
     const email = formData.get("email").trim();
     const password = formData.get("password");
 
-    if (!name || !email || !password) return { ok: false, message: "Please fill in name, email, and password." };
-    if (name.length < 2) return { ok: false, message: "Username must be at least 2 characters so admins can identify your records." };
+    if (!name || !email || !password) return { ok: false, message: "Unable to submit. Please complete all required fields." };
+    if (name.length < 2) return { ok: false, message: "Unable to submit. Please enter your name." };
     if (!isStrongPassword(password)) {
-      return { ok: false, message: "Use a stronger password: at least 8 characters with uppercase, lowercase, number, and symbol." };
+      return { ok: false, message: "Unable to submit. Password must include uppercase, lowercase, number, and symbol." };
     }
-    if (state.users.some((user) => user.email === email)) return { ok: false, message: "That email is already registered." };
+    if (state.users.some((user) => user.email === email)) return { ok: false, message: "Unable to submit. This email is already registered." };
 
     const user = {
       id: Date.now(),
@@ -90,7 +93,6 @@ export const authService = {
       password,
       role: "user",
       points: 0,
-      penalties: 0,
       avatar: "",
       phone: "",
       location: "Kuching, Sarawak",
@@ -140,6 +142,22 @@ export const authService = {
     saveState();
     return { ok: true, message: "Profile updated." };
   },
+
+  deleteCurrentAccount() {
+    const user = currentUser();
+    if (!user) return { ok: false, message: "No account is currently logged in." };
+    if (user.role === "admin") return { ok: false, message: "Admin accounts must be removed from Manage Users." };
+
+    state.users = state.users.filter((item) => item.id !== user.id);
+    state.records = state.records.filter((record) => record.userId !== user.id);
+    state.redeemed = state.redeemed.filter((item) => item.userId !== user.id);
+    state.learningRecords = state.learningRecords.filter((item) => item.userId !== user.id);
+    state.feedback = state.feedback.filter((item) => item.userId !== user.id);
+    state.currentUserId = null;
+    state.page = "home";
+    saveState();
+    return { ok: true, message: "Your account has been deleted." };
+  },
 };
 
 export const recyclingService = {
@@ -165,8 +183,13 @@ export const recyclingService = {
     const bin = selectedBin();
     const detectedCategory = state.aiDetection?.category || wasteCategory(state.selectedWaste);
     const detectedObject = state.aiDetection?.label || state.selectedWaste;
-    const isCorrect = bin.accepts === detectedCategory;
-    const points = isCorrect ? 1 : -1;
+    const placedZone = binZoneCategories.includes(state.sensorCheck?.zone)
+      ? state.sensorCheck.zone
+      : bin.accepts;
+    const expectedCategory = wasteCategory(placedZone);
+    const zoneBin = state.bins.find((item) => item.station === bin.station && item.accepts === expectedCategory) || bin;
+    const isCorrect = detectedCategory === expectedCategory;
+    const points = isCorrect ? 1 : 0;
 
     if (!state.locationCheck?.verified) {
       return "Location verification missing. Please verify GPS near the scanned bin before recording disposal.";
@@ -180,13 +203,14 @@ export const recyclingService = {
       id: Date.now(),
       userId: user.id,
       user: user.name,
-      binId: bin.id,
-      bin: bin.name,
-      location: bin.location,
+      binId: zoneBin.id,
+      bin: zoneBin.name,
+      location: zoneBin.location,
       waste: detectedObject,
-      expectedWaste: bin.accepts,
+      expectedWaste: expectedCategory,
       detectedCategory,
       detectedObject,
+      placedZone,
       presenceDetected: state.sensorCheck.presenceDetected ?? true,
       locationVerified: state.locationCheck.verified,
       distanceMeters: state.locationCheck.distance,
@@ -199,7 +223,6 @@ export const recyclingService = {
     });
 
     user.points = Math.max(0, user.points + points);
-    if (!isCorrect) user.penalties += 1;
 
     state.sensorCheck = { captured: false, confidence: 0 };
     state.aiDetection = null;
@@ -208,8 +231,8 @@ export const recyclingService = {
     state.page = "points";
     saveState();
     return isCorrect
-      ? `${detectedObject} detected as ${detectedCategory}. ${bin.name} matched: +1 point.`
-      : `${detectedObject} detected as ${detectedCategory}. ${bin.name} only accepts ${bin.accepts}: false, -1 point.`;
+      ? `${detectedObject} detected as ${detectedCategory}. ${zoneBin.name} matched the placed zone: +1 point.`
+      : `${detectedObject} detected as ${detectedCategory}. Placed zone accepts ${expectedCategory}. No points were added.`;
   },
 };
 
@@ -259,7 +282,7 @@ export const adminService = {
       name: `New Smart Bin ${state.bins.length + 1}`,
       location: "Kuching, Sarawak",
       status: "Available",
-      accepts: ["Plastic", "Paper", "General Waste"][state.bins.length % 3],
+      accepts: ["Paper", "Plastic", "Aluminium", "General Waste"][state.bins.length % 4],
       lat: 1.51983 + offset,
       lng: 110.351 + offset,
       mapX: 50,
@@ -295,7 +318,6 @@ export const adminService = {
       password,
       role: "user",
       points: 0,
-      penalties: 0,
       avatar: "",
       phone: "",
       location,

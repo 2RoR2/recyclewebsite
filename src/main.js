@@ -2,6 +2,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import "leaflet/dist/leaflet.css";
 import "./index.css";
+import "./responsive.css";
 import { Chart } from "chart.js/auto";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import gsap from "gsap";
@@ -11,7 +12,7 @@ import QRCode from "qrcode";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
 import * as THREE from "three";
-import { collectionLocation, saveState, state } from "./backend/database.js";
+import { collectionLocation, initializeDatabase, saveState, state } from "./backend/database.js";
 import { adminService, authService, currentUser, feedbackService, learningService, recyclingService, rewardService, role, selectedBin } from "./backend/services.js";
 import { renderAdminPage } from "./frontend/admin/pages.js";
 import { renderGuestPage } from "./frontend/guest/pages.js";
@@ -29,10 +30,14 @@ let threeGameCleanup = null;
 let aiCameraStream = null;
 let aiScanBusy = false;
 let gpsPromptOpen = false;
+let autoLocationBusy = false;
 let aiCountdownOpen = false;
 let lastGpsPromptKey = "";
-let lastDetectionPromptKey = "";
 let appReady = false;
+let deferredInstallPrompt = null;
+let waitingServiceWorker = null;
+let pageMotionCleanups = [];
+let smoothScrollReady = false;
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -85,7 +90,7 @@ const stationCodeFromScanValue = (value) => {
 };
 
 const stationBinForCode = (stationCode) =>
-  state.bins.find((bin) => bin.qrCode?.startsWith(`${stationCode}-`) && bin.accepts === "Plastic")
+  state.bins.find((bin) => bin.qrCode?.startsWith(`${stationCode}-`) && bin.accepts === "Paper")
   || state.bins.find((bin) => bin.qrCode?.startsWith(`${stationCode}-`));
 
 const handleStationFromQr = (scanValue, { updateUrl = false } = {}) => {
@@ -124,7 +129,7 @@ const handleStationFromQr = (scanValue, { updateUrl = false } = {}) => {
   saveState();
   showToast(`${bin.station} detected.`);
   render();
-  window.setTimeout(promptGpsVerification, 250);
+  window.setTimeout(autoVerifyCurrentLocationAfterScan, 250);
   return true;
 };
 
@@ -193,6 +198,59 @@ const verifyBinLocation = () =>
   );
 });
 
+const applyCurrentLocationToSelectedStation = () =>
+  new Promise((resolve) => {
+    const activeBin = selectedBin();
+    const stationName = activeBin.station;
+
+    if (!("geolocation" in navigator)) {
+      showToast("This device does not support GPS.");
+      resolve(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const stationBins = state.bins.filter((bin) => bin.station === stationName);
+        const fallbackBins = stationBins.length ? stationBins : [activeBin];
+        const offsets = [-0.00003, 0, 0.00003];
+        fallbackBins.forEach((bin, index) => {
+          bin.lat = position.coords.latitude + offsets[index % offsets.length];
+          bin.lng = position.coords.longitude + offsets[index % offsets.length];
+          bin.location = "Current GPS location";
+        });
+        state.locationCheck = {
+          verified: true,
+          distance: 0,
+          autoDetected: true,
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        saveState();
+        showToast(`Current location detected for ${stationName}.`);
+        render();
+        resolve(true);
+      },
+      () => {
+        state.locationCheck = { verified: false, distance: null };
+        saveState();
+        showToast("Could not auto-detect current location. Please allow GPS access.");
+        render();
+        resolve(false);
+      },
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 0 }
+    );
+  });
+
+const autoVerifyCurrentLocationAfterScan = async () => {
+  if (autoLocationBusy || role() !== "user" || state.page !== "select-waste" || state.locationCheck?.verified) return;
+  autoLocationBusy = true;
+  const verified = await applyCurrentLocationToSelectedStation();
+  autoLocationBusy = false;
+  if (verified) return;
+  window.setTimeout(promptGpsVerification, 350);
+};
+
 const promptGpsVerification = async () => {
   if (gpsPromptOpen || role() !== "user" || state.page !== "select-waste" || state.locationCheck?.verified) return;
   const bin = selectedBin();
@@ -205,23 +263,13 @@ const promptGpsVerification = async () => {
     confirmButtonText: "Verify GPS",
     showCancelButton: true,
     cancelButtonText: "Cancel",
-    confirmButtonColor: "#1f7a45",
+    confirmButtonColor: "#0b0b0d",
   });
 
   gpsPromptOpen = false;
   if (!result.isConfirmed) return;
 
-  const verified = await verifyBinLocation();
-  if (verified) {
-    const ready = await Swal.fire({
-      title: "GPS Verified",
-      text: "Press start. The system will count 3, 2, 1, then detect the rubbish from your camera.",
-      icon: "success",
-      confirmButtonText: "Start Detection",
-      confirmButtonColor: "#1f7a45",
-    });
-    if (ready.isConfirmed) await startAiCountdownAndDetect();
-  }
+  await verifyBinLocation();
 };
 
 const promptStartDetection = async () => {
@@ -234,7 +282,7 @@ const promptStartDetection = async () => {
     confirmButtonText: "Start",
     showCancelButton: true,
     cancelButtonText: "Cancel",
-    confirmButtonColor: "#1f7a45",
+    confirmButtonColor: "#0b0b0d",
   });
 
   if (ready.isConfirmed) await startAiCountdownAndDetect();
@@ -247,16 +295,10 @@ const initScanVerificationPrompt = () => {
     const promptKey = `${state.selectedBinId || ""}-${state.locationCheck?.distance ?? "new"}`;
     if (lastGpsPromptKey === promptKey) return;
     lastGpsPromptKey = promptKey;
-    window.setTimeout(promptGpsVerification, 350);
+    window.setTimeout(autoVerifyCurrentLocationAfterScan, 350);
     return;
   }
 
-  if (!state.aiDetection && !state.sensorCheck?.captured) {
-    const promptKey = `${state.selectedBinId || ""}-${state.locationCheck?.distance ?? 0}-ready`;
-    if (lastDetectionPromptKey === promptKey) return;
-    lastDetectionPromptKey = promptKey;
-    window.setTimeout(promptStartDetection, 350);
-  }
 };
 
 const setDemoStationToCurrentLocation = () => {
@@ -321,13 +363,13 @@ const handleBinFromQr = (scanValue, { updateUrl = false } = {}) => {
   recyclingService.selectBin(bin.id);
   showToast(`Bin ${bin.id} detected.`);
   render();
-  window.setTimeout(promptGpsVerification, 250);
+  window.setTimeout(autoVerifyCurrentLocationAfterScan, 250);
   return true;
 };
 
 const showToast = (message) => {
   if (!message) return;
-  const errorWords = ["failed", "try again", "wrong", "penalty", "unknown", "not enough", "no points", "could not", "false", "missing"];
+  const errorWords = ["failed", "try again", "wrong", "unknown", "not enough", "no points", "could not", "false", "missing"];
   const isError = errorWords.some((word) => message.toLowerCase().includes(word));
   Swal.fire({
     text: message,
@@ -339,9 +381,9 @@ const showToast = (message) => {
 };
 
 const routeSets = {
-  guest: ["home", "auth"],
-  user: ["scan", "locations", "education", "game", "learning-records", "select-waste", "points", "penalties", "rewards", "item-detail", "redeem-confirm", "my-redeemed", "collection", "history", "contact", "profile"],
-  admin: ["admin-dashboard", "manage-qr", "manage-bins", "bin-status", "waste-records", "manage-users", "manage-user-detail", "points-management", "penalty-management", "manage-rewards", "redemptions", "reports", "profile"],
+  guest: ["home", "news", "auth", "support", "recycle-guide"],
+  user: ["scan", "locations", "maps", "education", "game", "learning-records", "select-waste", "points", "rewards", "item-detail", "redeem-confirm", "my-redeemed", "collection", "history", "contact", "profile"],
+  admin: ["admin-dashboard", "manage-qr", "manage-bins", "bin-status", "waste-records", "manage-users", "manage-user-detail", "points-management", "manage-rewards", "redemptions", "reports", "profile"],
 };
 
 const pageForRole = () => {
@@ -356,7 +398,15 @@ const pageForRole = () => {
   return renderGuestPage();
 };
 
+const cleanupPageMotion = () => {
+  pageMotionCleanups.forEach((cleanup) => cleanup());
+  pageMotionCleanups = [];
+  ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+};
+
 const renderLoadingScreen = () => {
+  document.body.dataset.role = "loading";
+  document.body.dataset.page = "loading";
   navLinks.innerHTML = "";
   navActions.innerHTML = "";
   app.innerHTML = `
@@ -382,7 +432,10 @@ const render = () => {
     threeGameCleanup = null;
   }
   if (state.page !== "select-waste") stopAiSensorCameras();
+  cleanupPageMotion();
   renderNav(navLinks, navActions);
+  document.body.dataset.role = role();
+  document.body.dataset.page = state.page;
   app.innerHTML = pageForRole();
   initPagePlugins();
 };
@@ -405,7 +458,27 @@ const go = (page) => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
-const handleNavigation = (target) => {
+const handleNavigation = async (target) => {
+  if (target.dataset.anchor) {
+    const anchor = target.dataset.anchor;
+    if (anchor === "home") {
+      if (role() === "guest") go("home");
+      else go(role() === "admin" ? "admin-dashboard" : "scan");
+      return;
+    }
+    const section = document.querySelector(`#${anchor}`);
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (role() === "guest") {
+      go("home");
+      window.setTimeout(() => document.querySelector(`#${anchor}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+      return;
+    }
+    if (anchor === "contact" && routeSets[role()]?.includes("contact")) go("contact");
+  }
+
   if (target.dataset.page) go(target.dataset.page);
 
   if (target.dataset.auth) {
@@ -416,6 +489,32 @@ const handleNavigation = (target) => {
   if (target.dataset.action === "logout") {
     authService.logout();
     go("home");
+  }
+
+  if (target.dataset.action === "install-pwa") {
+    showInstallPrompt();
+  }
+
+  if (target.dataset.action === "back-to-top") {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  if (target.dataset.action === "delete-profile") {
+    const confirmed = await Swal.fire({
+      title: "Delete account?",
+      text: "This removes your profile, recycling records, learning records, and redeemed item history from this app.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete Account",
+      cancelButtonText: "Keep Account",
+      confirmButtonColor: "#d71920",
+      cancelButtonColor: "#0f5a20",
+    });
+
+    if (!confirmed.isConfirmed) return;
+    const result = authService.deleteCurrentAccount();
+    if (result?.message) showToast(result.message);
+    render();
   }
 };
 
@@ -468,7 +567,13 @@ const handleUserActions = (target) => {
         manualZone: zone,
       };
       saveState();
-      render();
+      document.querySelectorAll(".ai-zone").forEach((button) => {
+        button.classList.toggle("active", button.dataset.zoneSelect === zone);
+      });
+      const zoneLabel = document.querySelector("[data-active-zone-label]");
+      if (zoneLabel) zoneLabel.textContent = zone;
+      document.querySelector(".ai-zone-wrapper")?.classList.add("has-selected-zone");
+      initAiSensorCameras();
     }
   }
 
@@ -588,12 +693,56 @@ const handleClick = (event) => {
   handleAdminActions(target);
 };
 
+const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+
+const hasStrongPasswordParts = (value) =>
+  /[a-z]/.test(value)
+  && /[A-Z]/.test(value)
+  && /\d/.test(value)
+  && /[^A-Za-z0-9]/.test(value);
+
+const validationErrorForForm = (form, formData) => {
+  const formType = form.dataset.form;
+  const email = formData.get("email")?.trim() || "";
+  const password = formData.get("password") || "";
+
+  if (formType === "register") {
+    const name = formData.get("name")?.trim() || "";
+    if (!name) return "Unable to submit. Please enter your name.";
+    if (name.length < 2) return "Unable to submit. Please enter your name.";
+    if (!email) return "Unable to submit. Please enter a valid email address.";
+    if (!isValidEmail(email)) return "Unable to submit. Please enter a valid email address.";
+    if (!password || password.length < 8) return "Unable to submit. Password must contain at least 8 characters.";
+    if (!hasStrongPasswordParts(password)) return "Unable to submit. Password must include uppercase, lowercase, number, and symbol.";
+  }
+
+  if (formType === "login") {
+    if (!email || !isValidEmail(email)) return "Unable to submit. Please enter a valid email address.";
+    if (!password) return "Unable to submit. Please complete all required fields.";
+  }
+
+  const requiredFields = [...form.querySelectorAll("[required]")];
+  const hasMissingRequired = requiredFields.some((field) => {
+    if (field.type === "checkbox" || field.type === "radio") return !field.checked;
+    return !String(field.value || "").trim();
+  });
+
+  if (hasMissingRequired) return "Unable to submit. Please complete all required fields.";
+  return "";
+};
+
 const handleSubmit = (event) => {
   const form = event.target.closest("form");
   if (!form) return;
 
   event.preventDefault();
   const formData = new FormData(form);
+  const validationMessage = validationErrorForForm(form, formData);
+  if (validationMessage) {
+    showToast(validationMessage);
+    return;
+  }
+
   let result = null;
 
   if (form.dataset.form === "login") result = authService.login(formData);
@@ -606,7 +755,7 @@ const handleSubmit = (event) => {
 
   if (result?.message) showToast(result.message);
   render();
-  if (result?.ok && state.page === "select-waste") window.setTimeout(promptGpsVerification, 250);
+  if (result?.ok && state.page === "select-waste") window.setTimeout(autoVerifyCurrentLocationAfterScan, 250);
 };
 
 const readAvatar = (file) =>
@@ -653,19 +802,20 @@ const handleRewardImageChange = async (input) => {
 const localYoloFallback = (file) => {
   const name = file.name.toLowerCase();
   const checks = [
-    { words: ["plastic", "bottle", "cup"], label: "plastic bottle", category: "Plastic" },
     { words: ["paper", "newspaper", "cardboard", "box"], label: "paper", category: "Paper" },
-    { words: ["tissue", "wrapper", "food", "general"], label: "general waste", category: "General Waste" },
+    { words: ["plastic", "bottle", "cup"], label: "plastic bottle", category: "Plastic" },
+    { words: ["aluminium", "aluminum", "can", "tin", "soda"], label: "aluminium", category: "Aluminium" },
+    { words: ["wrapper", "tissue", "food", "rubbish", "trash", "dirty"], label: "general waste", category: "General Waste" },
   ];
   const matched = checks.find((item) => item.words.some((word) => name.includes(word)));
   const result = matched || checks[(file.size + file.name.length) % checks.length];
 
   return {
     ...result,
-    confidence: 86 + ((file.size + file.name.length) % 11),
+    confidence: 45,
     box: { x: 128, y: 84, width: 260, height: 260 },
     model: "YOLO detector fallback",
-    presenceDetected: true,
+    presenceDetected: false,
   };
 };
 
@@ -698,42 +848,42 @@ const detectWasteWithAi = async (file) => {
   }
 };
 
-const frameToBlob = (video) =>
+const aiZoneOrder = ["Paper", "Plastic", "Aluminium", "General Waste"];
+
+const frameToBlob = (video, selectedZone = null) =>
   new Promise((resolve) => {
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    const frameWidth = video.videoWidth || 640;
+    const frameHeight = video.videoHeight || 480;
+    const zoneIndex = aiZoneOrder.indexOf(selectedZone);
+    const zoneWidth = frameWidth / aiZoneOrder.length;
+    const sourceX = zoneIndex >= 0 ? Math.round(zoneIndex * zoneWidth) : 0;
+    const sourceWidth = zoneIndex >= 0 ? Math.round(zoneWidth) : frameWidth;
+
+    canvas.width = sourceWidth;
+    canvas.height = frameHeight;
     const context = canvas.getContext("2d");
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    context.drawImage(video, sourceX, 0, sourceWidth, frameHeight, 0, 0, canvas.width, canvas.height);
     canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.86);
   });
 
-const zoneCategoryFromDetection = (detection, video) => {
-  const box = detection?.box;
-  if (!box || typeof box.x !== "number") return null;
+const collectAiTrainingSample = async ({ blob, zoneCategory, detection, correct }) => {
+  if (!blob || !zoneCategory || !detection) return;
 
-  const frameWidth = video.videoWidth || 0;
-  if (!frameWidth) return null;
+  const formData = new FormData();
+  formData.append("image", blob, `sample-${zoneCategory.toLowerCase().replaceAll(" ", "-")}.jpg`);
+  formData.append("category", zoneCategory);
+  formData.append("detected_category", detection.category || "");
+  formData.append("confidence", String(detection.confidence || 0));
+  formData.append("station", selectedBin().station || "");
+  formData.append("zone", zoneCategory);
+  formData.append("use_for_training", String(correct && detection.confidence >= 80));
 
-  const widthValue = typeof box.width === "number" ? box.width : 0;
-  const xValue = box.x;
-
-  let centerRatio = null;
-  if (xValue >= 0 && xValue <= 1 && widthValue >= 0 && widthValue <= 1) {
-    centerRatio = xValue + (widthValue / 2);
-  } else if (xValue >= 0 && xValue <= 100 && widthValue >= 0 && widthValue <= 100) {
-    centerRatio = (xValue + (widthValue / 2)) / 100;
-  } else {
-    const centerX = widthValue > 0 ? xValue + (widthValue / 2) : xValue;
-    centerRatio = centerX / frameWidth;
+  try {
+    await fetch("http://127.0.0.1:8000/collect-sample", { method: "POST", body: formData });
+  } catch {
+    // Sample collection is optional and only runs when the local AI service is available.
   }
-
-  if (typeof centerRatio !== "number" || Number.isNaN(centerRatio)) return null;
-  const clampedRatio = Math.max(0, Math.min(0.9999, centerRatio));
-
-  if (clampedRatio < 1 / 3) return "Plastic";
-  if (clampedRatio < 2 / 3) return "Paper";
-  return "General Waste";
 };
 
 const runLiveAiDetection = async () => {
@@ -744,9 +894,19 @@ const runLiveAiDetection = async () => {
   aiScanBusy = true;
   try {
     const preservedManualZone = state.sensorCheck?.manualZone || null;
-    const blob = await frameToBlob(video);
+    if (!preservedManualZone) {
+      await Swal.fire({
+        title: "Select Zone First",
+        text: "Only the selected bin zone works as the sensor area.",
+        icon: "info",
+        confirmButtonColor: "#0b0b0d",
+      });
+      return;
+    }
+
+    const blob = await frameToBlob(video, preservedManualZone);
     if (!blob) return;
-    const file = new File([blob], "live-camera-frame.jpg", { type: "image/jpeg" });
+    const file = new File([blob], `live-camera-${preservedManualZone.toLowerCase().replaceAll(" ", "-")}-zone.jpg`, { type: "image/jpeg" });
     const detection = await detectWasteWithAi(file);
     state.sensorCheck = {
       captured: true,
@@ -756,9 +916,11 @@ const runLiveAiDetection = async () => {
       manualZone: preservedManualZone,
     };
     state.aiDetection = detection;
-    const zoneCategory = preservedManualZone || zoneCategoryFromDetection(detection, video);
+    const zoneCategory = preservedManualZone;
     state.sensorCheck.zone = zoneCategory || "Unknown zone";
-    const matchedStationBin = stationBinsForSelectedLocation().find((bin) => bin.accepts === (zoneCategory || detection.category));
+    const matchedStationBin = zoneCategory
+      ? stationBinsForSelectedLocation().find((bin) => bin.accepts === zoneCategory)
+      : null;
     if (matchedStationBin) state.selectedBinId = matchedStationBin.id;
     saveState();
     if (detection.confidence < 70) {
@@ -766,34 +928,46 @@ const runLiveAiDetection = async () => {
         title: "Low Confidence",
         text: "Move the rubbish closer to the camera or improve lighting, then scan again.",
         icon: "warning",
-        confirmButtonColor: "#1f7a45",
+        confirmButtonColor: "#0b0b0d",
       });
       render();
       return;
     }
 
-    const detectionId = `${detection.label}-${detection.category}-${detection.confidence}`;
+    if (!zoneCategory || !matchedStationBin) {
+      await Swal.fire({
+        title: "Zone Not Clear",
+        text: "Place the rubbish fully inside one bin zone, then scan again.",
+        icon: "warning",
+        confirmButtonColor: "#0b0b0d",
+      });
+      render();
+      return;
+    }
+
+    const detectionId = `${detection.label}-${detection.category}-${zoneCategory}-${detection.confidence}`;
     if (state.autoRecordedDetectionId !== detectionId) {
       state.autoRecordedDetectionId = detectionId;
       saveState();
       stopAiSensorCameras();
-      const bin = selectedBin();
-      const correct = detection.category === bin.accepts;
+      const correct = detection.category === zoneCategory;
+      collectAiTrainingSample({ blob, zoneCategory, detection, correct });
       await Swal.fire({
         title: correct ? "Correct Disposal" : "Incorrect Disposal",
         html: `
           <div class="ai-result-modal">
             <p><strong>Detected object:</strong> ${detection.label}</p>
+            <p><strong>Detected category:</strong> ${detection.category}</p>
             <p><strong>Confidence:</strong> ${detection.confidence}%</p>
-            <p><strong>Placed zone:</strong> ${state.sensorCheck.zone || "Unknown zone"}</p>
-            <p><strong>Scanned bin:</strong> ${bin.name}</p>
-            <p><strong>Expected:</strong> ${bin.accepts}</p>
+            <p><strong>Placed zone:</strong> ${zoneCategory}</p>
+            <p><strong>Zone bin:</strong> ${matchedStationBin.name}</p>
+            <p><strong>Expected for zone:</strong> ${zoneCategory}</p>
             <p><strong>Result:</strong> ${correct ? "Correct" : "False"}</p>
           </div>
         `,
         icon: correct ? "success" : "error",
         confirmButtonText: "Save Result",
-        confirmButtonColor: "#1f7a45",
+        confirmButtonColor: "#0b0b0d",
       });
       showToast(recyclingService.recordWaste());
       render();
@@ -807,6 +981,16 @@ const runLiveAiDetection = async () => {
 
 const startAiCountdownAndDetect = async () => {
   if (aiCountdownOpen || state.page !== "select-waste" || !state.locationCheck?.verified) return;
+  if (!state.sensorCheck?.manualZone) {
+    await Swal.fire({
+      title: "Select Zone First",
+      text: "Tap the bin zone where you placed the rubbish, then start detection.",
+      icon: "info",
+      confirmButtonColor: "#0b0b0d",
+    });
+    return;
+  }
+
   aiCountdownOpen = true;
 
   try {
@@ -984,26 +1168,82 @@ const initLeafletMap = () => {
   if (!mapElement || mapElement.dataset.ready) return;
 
   mapElement.dataset.ready = "true";
-  const map = L.map(mapElement, { scrollWheelZoom: false }).setView([1.5205, 110.3715], 12);
+  const stations = binStations().filter((station) =>
+    Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng))
+  );
+  const map = L.map(mapElement, { scrollWheelZoom: false }).setView([1.5008, 110.3826], 11);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
 
-  binStations().forEach((station, index) => {
+  const markerByStationCode = new Map();
+  const stationButtons = [...document.querySelectorAll("[data-map-station]")];
+  let activeMarker = null;
+
+  const stationIcon = (station, index, active = false) => {
     const hasIssue = station.bins.some((bin) => bin.status !== "Available");
+    const size = active ? 56 : 38;
+    return L.divIcon({
+      className: `leaflet-bin-marker ${hasIssue ? "maintenance" : "available"} ${active ? "selected" : ""}`,
+      html: `<span>${index + 1}</span>`,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size],
+    });
+  };
+
+  const selectStation = (stationCode, { moveMap = true } = {}) => {
+    const selected = markerByStationCode.get(stationCode);
+    if (!selected) return;
+
+    if (activeMarker && activeMarker !== selected.marker) {
+      activeMarker.setIcon(stationIcon(activeMarker.ecoStation, activeMarker.ecoIndex));
+      activeMarker.setZIndexOffset(0);
+    }
+
+    selected.marker.setIcon(stationIcon(selected.station, selected.index, true));
+    selected.marker.setZIndexOffset(1000);
+    selected.marker.openPopup();
+    activeMarker = selected.marker;
+
+    stationButtons.forEach((button) => {
+      button.classList.toggle("active", button.dataset.mapStation === stationCode);
+    });
+
+    if (moveMap) {
+      map.flyTo([selected.station.lat, selected.station.lng], Math.max(map.getZoom(), 14), {
+        animate: true,
+        duration: 0.75,
+      });
+    }
+  };
+
+  stations.forEach((station, index) => {
     const marker = L.marker([station.lat, station.lng], {
-      icon: L.divIcon({
-        className: `leaflet-bin-marker ${hasIssue ? "maintenance" : "available"}`,
-        html: `<span>${index + 1}</span>`,
-        iconSize: [38, 38],
-        iconAnchor: [19, 38],
-      }),
+      icon: stationIcon(station, index),
     }).addTo(map);
-    marker.bindPopup(`<strong>${station.name}</strong><br>${station.location}<br>Plastic, Paper, General Waste`);
+    marker.ecoStation = station;
+    marker.ecoIndex = index;
+    marker.bindPopup(`<strong>${station.name}</strong><br>${station.location}<br>${Number(station.lat).toFixed(4)}, ${Number(station.lng).toFixed(4)}<br>Paper, Plastic, Aluminium, General Waste`);
+    marker.on("click", () => selectStation(station.code, { moveMap: false }));
+    markerByStationCode.set(station.code, { marker, station, index });
   });
 
-  window.setTimeout(() => map.invalidateSize(), 100);
+  stationButtons.forEach((button) => {
+    button.addEventListener("click", () => selectStation(button.dataset.mapStation));
+  });
+
+  const fitStationPins = () => {
+    map.invalidateSize();
+    if (stations.length > 1) {
+      map.fitBounds(stations.map((station) => [station.lat, station.lng]), {
+        padding: [42, 42],
+        maxZoom: 13,
+      });
+    }
+  };
+
+  window.setTimeout(fitStationPins, 120);
 };
 
 const initCollectionMap = () => {
@@ -1022,7 +1262,7 @@ const initCollectionMap = () => {
 
   const drawRoute = (origin) => {
     L.marker(origin).addTo(map).bindPopup("Your current location");
-    L.polyline([origin, destination], { color: "#1f7a45", weight: 5, opacity: 0.82, dashArray: "8 8" }).addTo(map);
+    L.polyline([origin, destination], { color: "#d71920", weight: 5, opacity: 0.82, dashArray: "8 8" }).addTo(map);
     map.fitBounds([origin, destination], {
       paddingTopLeft: [42, 110],
       paddingBottomRight: [42, 42],
@@ -1060,17 +1300,19 @@ const initReportChart = () => {
   reportChart = new Chart(canvas, {
     type: "bar",
     data: {
-      labels: ["Scans", "Penalties", "Rewards", "Game"],
+      labels: ["Scans", "Valid Records", "Rewards", "Game"],
       datasets: [
         {
           label: "Total Activity",
           data: [
             state.records.length,
-            state.records.filter((record) => record.points < 0).length,
+            state.records.filter((record) => record.points > 0).length,
             state.redeemed.length,
             state.learningRecords.length,
           ],
-          backgroundColor: ["#1f7a45", "#a83232", "#6d9f35", "#2d6cdf"],
+          backgroundColor: ["#ffd84d", "#1f9d55", "#0b0b0d", "#ffffff"],
+          borderColor: ["#0b0b0d", "#0b0b0d", "#0b0b0d", "#0b0b0d"],
+          borderWidth: 1,
         },
       ],
     },
@@ -1078,82 +1320,616 @@ const initReportChart = () => {
   });
 };
 
+const splitTextLikeSplitType = (element) => {
+  if (!element || element.dataset.splitReady) return [];
+  const text = element.textContent.trim();
+  if (!text) return [];
+
+  const words = text.split(/\s+/);
+  element.dataset.splitReady = "true";
+  element.setAttribute("aria-label", text);
+  element.textContent = "";
+
+  words.forEach((word, wordIndex) => {
+    const wordSpan = document.createElement("span");
+    wordSpan.className = "split-word";
+    wordSpan.setAttribute("aria-hidden", "true");
+
+    word.split("").forEach((letter) => {
+      const letterSpan = document.createElement("span");
+      letterSpan.className = "split-char";
+      letterSpan.textContent = letter;
+      wordSpan.appendChild(letterSpan);
+    });
+
+    element.appendChild(wordSpan);
+    if (wordIndex < words.length - 1) element.append(" ");
+  });
+
+  return Array.from(element.querySelectorAll(".split-char"));
+};
+
+const createUseScroll = () => {
+  const subscribers = new Set();
+  let frame = 0;
+
+  const measure = () => {
+    frame = 0;
+    const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
+    const progress = Math.min(window.scrollY / maxScroll, 1);
+    subscribers.forEach((subscriber) => subscriber(progress, window.scrollY));
+  };
+
+  const onScroll = () => {
+    if (!frame) frame = window.requestAnimationFrame(measure);
+  };
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  measure();
+
+  return {
+    subscribe(callback) {
+      subscribers.add(callback);
+      callback(0, window.scrollY);
+      return () => subscribers.delete(callback);
+    },
+    destroy() {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+      subscribers.clear();
+    },
+  };
+};
+
+const observeInView = (elements, callback, options = {}) => {
+  if (!elements.length || !("IntersectionObserver" in window)) return () => {};
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => callback(entry.target, entry.isIntersecting, entry));
+  }, {
+    rootMargin: "0px 0px -12% 0px",
+    threshold: 0.22,
+    ...options,
+  });
+
+  elements.forEach((element) => observer.observe(element));
+  return () => observer.disconnect();
+};
+
+const initScrollProgress = () => {
+  const progressBar = document.querySelector("#scrollProgress");
+  const backToTop = document.querySelector("#backToTop");
+  if (!progressBar && !backToTop) return;
+
+  const scroll = createUseScroll();
+  const unsubscribe = scroll.subscribe((progress) => {
+    document.documentElement.style.setProperty("--scroll-progress", progress.toFixed(4));
+    if (progressBar) progressBar.style.transform = `scaleX(${progress})`;
+    backToTop?.classList.toggle("visible", progress > 0.12);
+  });
+
+  pageMotionCleanups.push(() => {
+    unsubscribe();
+    scroll.destroy();
+  });
+};
+
+const initSmoothScrollEngine = () => {
+  if (smoothScrollReady) return;
+  smoothScrollReady = true;
+  document.documentElement.dataset.scrollEngine = "lenis-locomotive-inspired";
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest("a[href^='#']");
+    if (!link) return;
+    const target = document.querySelector(link.getAttribute("href"));
+    if (!target) return;
+    event.preventDefault();
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+};
+
+const initViewportMotion = () => {
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const trackedItems = gsap.utils.toArray("[data-view-step], .card, .panel, .stat, .station-card, .scanner-card");
+  const cleanup = observeInView(trackedItems, (element, isInView) => {
+    element.classList.toggle("is-in-view", isInView);
+  });
+  pageMotionCleanups.push(cleanup);
+
+  if (reduceMotion) return;
+
+  app.querySelectorAll("[data-split-text]").forEach((heading) => {
+    const chars = splitTextLikeSplitType(heading);
+    if (!chars.length) return;
+    gsap.from(chars, {
+      yPercent: 110,
+      opacity: 0,
+      rotateX: -55,
+      duration: 0.78,
+      ease: "expo.out",
+      stagger: 0.012,
+      scrollTrigger: {
+        trigger: heading,
+        start: "top 84%",
+      },
+    });
+  });
+};
+
+const initStickyStoryMotion = () => {
+  const story = document.querySelector("[data-sticky-story]");
+  if (!story || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const steps = gsap.utils.toArray(".sticky-step", story);
+  gsap.to(story, {
+    "--story-progress": 1,
+    ease: "none",
+    scrollTrigger: {
+      trigger: story,
+      start: "top 78%",
+      end: "bottom 28%",
+      scrub: 0.8,
+    },
+  });
+
+  steps.forEach((step, index) => {
+    gsap.from(step, {
+      x: index % 2 === 0 ? -44 : 44,
+      opacity: 0,
+      rotate: index % 2 === 0 ? -2 : 2,
+      duration: 0.7,
+      ease: "back.out(1.5)",
+      scrollTrigger: {
+        trigger: step,
+        start: "top 84%",
+      },
+    });
+  });
+};
+
+const initBinBurstMotion = () => {
+  const scene = document.querySelector("[data-bin-burst]");
+  if (!scene || scene.dataset.burstReady) return;
+  scene.dataset.burstReady = "true";
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const pieces = gsap.utils.toArray(".trash-piece", scene);
+  const bin = scene.querySelector(".burst-bin");
+  const ring = scene.querySelector(".burst-ring");
+  if (!pieces.length || !bin || !ring) return;
+
+  if (reduceMotion) {
+    pieces.forEach((piece) => piece.classList.add("is-in-view"));
+    return;
+  }
+
+  gsap.set(pieces, {
+    x: 0,
+    y: 126,
+    scale: 0.25,
+    opacity: 0,
+    rotate: 0,
+    transformOrigin: "50% 50%",
+  });
+  gsap.set(ring, { scale: 0.4, opacity: 0 });
+
+  const burstTimeline = gsap.timeline({
+    scrollTrigger: {
+      trigger: scene,
+      start: "top 72%",
+      end: "bottom 28%",
+      scrub: 0.8,
+    },
+  });
+
+  burstTimeline
+    .fromTo(bin, { y: 18, rotate: -1 }, { y: 0, rotate: 0, duration: 0.18, ease: "back.out(2)" })
+    .to(ring, { scale: 1.45, opacity: 0.9, duration: 0.22, ease: "power2.out" }, 0.08)
+    .to(ring, { scale: 2.1, opacity: 0, duration: 0.34, ease: "power2.out" }, 0.25)
+    .to(".trash-piece.bottle", { x: -188, y: -176, scale: 1, opacity: 1, rotate: -28, duration: 0.56, ease: "back.out(1.7)" }, 0.1)
+    .to(".trash-piece.paper", { x: -76, y: -238, scale: 1, opacity: 1, rotate: 18, duration: 0.58, ease: "back.out(1.8)" }, 0.13)
+    .to(".trash-piece.can", { x: 94, y: -212, scale: 1, opacity: 1, rotate: 34, duration: 0.56, ease: "back.out(1.7)" }, 0.16)
+    .to(".trash-piece.wrapper", { x: 198, y: -120, scale: 1, opacity: 1, rotate: 50, duration: 0.58, ease: "back.out(1.8)" }, 0.19)
+    .to(".trash-piece.carton", { x: -148, y: -70, scale: 1, opacity: 1, rotate: 14, duration: 0.48, ease: "back.out(1.7)" }, 0.23)
+    .to(".trash-piece.cup", { x: 132, y: -58, scale: 1, opacity: 1, rotate: -18, duration: 0.48, ease: "back.out(1.7)" }, 0.25)
+    .to(".trash-piece.spark", { y: -190, scale: 1, opacity: 1, rotate: 180, duration: 0.4, ease: "power3.out" }, 0.12)
+    .to(pieces, { y: "+=18", repeat: 1, yoyo: true, duration: 0.24, ease: "sine.inOut", stagger: 0.018 }, 0.66);
+};
+
+const initRouteMapMotion = () => {
+  const map = document.querySelector("[data-route-map]");
+  if (!map || map.dataset.routeReady) return;
+  map.dataset.routeReady = "true";
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const route = map.querySelector(".route-draw");
+  const points = gsap.utils.toArray("[data-route-point]", map);
+  const glitter = gsap.utils.toArray(".route-glitter circle", map);
+  const routeLength = route?.getTotalLength?.() || 0;
+
+  if (!route || reduceMotion) {
+    map.classList.add("route-ready");
+    return;
+  }
+
+  gsap.set(route, { strokeDasharray: routeLength, strokeDashoffset: routeLength });
+  gsap.set(points, { opacity: 0, scale: 0.65, transformOrigin: "center center" });
+  gsap.set(glitter, { opacity: 0, scale: 0.4, transformOrigin: "center center" });
+
+  const routeTimeline = gsap.timeline({
+    scrollTrigger: {
+      trigger: map,
+      start: "top 78%",
+      end: "bottom 38%",
+      scrub: 0.9,
+    },
+  });
+
+  routeTimeline
+    .to(route, { strokeDashoffset: 0, duration: 1, ease: "none" })
+    .to(points, {
+      opacity: 1,
+      scale: 1,
+      duration: 0.34,
+      ease: "back.out(2.4)",
+      stagger: 0.08,
+    }, 0.04)
+    .to(glitter, {
+      opacity: 1,
+      scale: 1.6,
+      duration: 0.18,
+      repeat: 3,
+      yoyo: true,
+      ease: "sine.inOut",
+      stagger: 0.05,
+    }, 0.16)
+    .to(points, {
+      filter: "drop-shadow(0 0 10px rgba(255, 198, 0, 0.85))",
+      duration: 0.2,
+      stagger: 0.05,
+    }, 0.22);
+};
+
 const initHomeAnimations = () => {
   const hero = document.querySelector("[data-home-hero]");
   if (!hero || hero.dataset.gsapReady) return;
   hero.dataset.gsapReady = "true";
 
+  const heroVideo = hero.querySelector("#heroVideoBg");
+  if (heroVideo) {
+    const keepHeroVideoPlaying = () => {
+      if (heroVideo.tagName === "IFRAME") {
+        heroVideo.contentWindow?.postMessage(JSON.stringify({
+          event: "command",
+          func: "mute",
+          args: [],
+        }), "https://www.youtube.com");
+        heroVideo.contentWindow?.postMessage(JSON.stringify({
+          event: "command",
+          func: "playVideo",
+          args: [],
+        }), "https://www.youtube.com");
+        return;
+      }
+
+      heroVideo.muted = true;
+      heroVideo.play?.().catch(() => {
+        // Some browsers delay autoplay until they decide the page is ready.
+      });
+    };
+    const playInterval = window.setInterval(keepHeroVideoPlaying, 3500);
+    heroVideo.addEventListener("load", keepHeroVideoPlaying);
+    document.addEventListener("visibilitychange", keepHeroVideoPlaying);
+    window.setTimeout(keepHeroVideoPlaying, 400);
+    pageMotionCleanups.push(() => {
+      window.clearInterval(playInterval);
+      heroVideo.removeEventListener("load", keepHeroVideoPlaying);
+      document.removeEventListener("visibilitychange", keepHeroVideoPlaying);
+    });
+  }
+
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (reduceMotion) return;
 
-  const copyItems = hero.querySelectorAll(".landing-copy .eyebrow, .landing-copy h1, .landing-copy .lead, .hero-metrics, .trust-row, .hero-actions");
-  gsap.from(copyItems, {
-    y: 28,
-    opacity: 0,
-    duration: 0.9,
-    ease: "power3.out",
-    stagger: 0.08,
+  const copyItems = gsap.utils.toArray(".landing-copy .eyebrow, .landing-copy h1, .landing-copy .lead, .hero-metrics, .trust-row, .hero-actions", hero);
+  if (copyItems.length) {
+    gsap.from(copyItems, {
+      y: 28,
+      opacity: 0,
+      duration: 0.9,
+      ease: "power3.out",
+      stagger: 0.08,
+    });
+  }
+
+  const showcaseImage = hero.querySelector(".showcase-image");
+  if (showcaseImage) {
+    gsap.from(showcaseImage, {
+      y: 42,
+      scale: 0.94,
+      opacity: 0,
+      duration: 1,
+      ease: "power3.out",
+      delay: 0.2,
+    });
+
+    gsap.to(showcaseImage, {
+      y: -14,
+      duration: 3.8,
+      repeat: -1,
+      yoyo: true,
+      ease: "sine.inOut",
+    });
+  }
+
+  const flowerArt = hero.querySelector(".flower-art");
+  if (flowerArt) {
+    gsap.to(flowerArt, {
+      rotate: 7,
+      y: -10,
+      duration: 4.6,
+      repeat: -1,
+      yoyo: true,
+      ease: "sine.inOut",
+    });
+  }
+
+  const shelf = document.querySelector("[data-store-shelf]");
+  const storeCards = gsap.utils.toArray(".store-card");
+  storeCards.forEach((card, index) => {
+    const image = card.querySelector("img");
+    gsap.set(card, { transformOrigin: "center bottom" });
+    gsap.to(card, {
+      y: index % 2 === 0 ? -10 : 10,
+      duration: 4 + index * 0.25,
+      repeat: -1,
+      yoyo: true,
+      ease: "sine.inOut",
+      delay: index * 0.12,
+    });
+
+    if (image) {
+      gsap.to(image, {
+        yPercent: -6,
+        ease: "none",
+        scrollTrigger: {
+          trigger: card,
+          start: "top bottom",
+          end: "bottom top",
+          scrub: 0.8,
+        },
+      });
+    }
   });
 
-  gsap.from(hero.querySelector(".showcase-image"), {
-    y: 42,
-    scale: 0.94,
-    opacity: 0,
-    duration: 1,
-    ease: "power3.out",
-    delay: 0.2,
-  });
+  const storeRevealItems = gsap.utils.toArray(".store-headline > *, .store-card");
+  if (shelf && storeRevealItems.length) {
+    gsap.from(storeRevealItems, {
+      scrollTrigger: {
+        trigger: shelf,
+        start: "top 78%",
+      },
+      y: 34,
+      opacity: 0,
+      duration: 0.75,
+      ease: "power3.out",
+      stagger: 0.08,
+    });
+  }
 
-  gsap.to(hero.querySelector(".showcase-image"), {
-    y: -14,
-    duration: 3.8,
-    repeat: -1,
-    yoyo: true,
-    ease: "sine.inOut",
-  });
+  const storeCardRow = document.querySelector(".store-card-row");
+  if (shelf && storeCardRow) {
+    gsap.fromTo(storeCardRow, { x: 46 }, {
+      x: -34,
+      ease: "none",
+      scrollTrigger: {
+        trigger: shelf,
+        start: "top bottom",
+        end: "bottom top",
+        scrub: 1,
+      },
+    });
+  }
 
-  gsap.to(hero.querySelector(".flower-art"), {
-    rotate: 7,
-    y: -10,
-    duration: 4.6,
-    repeat: -1,
-    yoyo: true,
-    ease: "sine.inOut",
-  });
+  const landingBand = document.querySelector(".landing-band");
+  const landingItems = gsap.utils.toArray(".landing-band .section-title, .landing-band .process-card");
+  if (landingBand && landingItems.length) {
+    gsap.from(landingItems, {
+      scrollTrigger: {
+        trigger: landingBand,
+        start: "top 80%",
+      },
+      y: 30,
+      opacity: 0,
+      duration: 0.7,
+      ease: "power3.out",
+      stagger: 0.07,
+    });
+  }
+};
 
-  gsap.from(".store-headline > *, .store-card", {
-    scrollTrigger: {
-      trigger: "[data-store-shelf]",
-      start: "top 78%",
-    },
-    y: 34,
-    opacity: 0,
-    duration: 0.75,
-    ease: "power3.out",
-    stagger: 0.08,
-  });
+const initGlobalPageAnimations = () => {
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduceMotion) return;
 
-  gsap.from(".landing-band .section-title, .landing-band .process-card", {
-    scrollTrigger: {
-      trigger: ".landing-band",
-      start: "top 80%",
-    },
-    y: 30,
-    opacity: 0,
-    duration: 0.7,
-    ease: "power3.out",
-    stagger: 0.07,
+  const page = app.querySelector(".page, .content-band, .landing-auth");
+  if (!page || page.dataset.motionReady) return;
+  page.dataset.motionReady = "true";
+
+  const pageIntro = gsap.utils.toArray(".section-title, .dashboard-header, .auth-card, .profile-card, .map-layout, .scan-page-shell", page);
+  if (pageIntro.length) {
+    gsap.from(pageIntro, {
+      y: 22,
+      opacity: 0,
+      duration: 0.72,
+      ease: "power3.out",
+      stagger: 0.06,
+    });
+  }
+
+  const motionItems = gsap.utils.toArray([
+    ".card",
+    ".panel",
+    ".stat",
+    ".choice",
+    ".station-card",
+    ".scanner-card",
+    ".table-wrap",
+    ".inline-form",
+    ".education-video-card",
+    ".leaderboard > div",
+    ".request-list > div",
+    ".status-list > div",
+    ".work-list > button",
+  ].join(", "), page);
+
+  if (motionItems.length) {
+    gsap.from(motionItems, {
+      scrollTrigger: {
+        trigger: page,
+        start: "top 85%",
+      },
+      y: 26,
+      opacity: 0,
+      duration: 0.62,
+      ease: "power3.out",
+      stagger: 0.045,
+    });
+  }
+
+  page.querySelectorAll(".card img, .split-img, .profile-avatar").forEach((image) => {
+    gsap.fromTo(image, { scale: 1.035 }, {
+      scale: 1,
+      duration: 1.1,
+      ease: "power3.out",
+      scrollTrigger: {
+        trigger: image,
+        start: "top 92%",
+      },
+    });
+  });
+};
+
+const initAuthMascotMotion = () => {
+  const mascot = app.querySelector("[data-auth-mascot]");
+  if (!mascot || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const pupils = [...mascot.querySelectorAll(".auth-pupil")];
+  if (!pupils.length) return;
+
+  const moveEyes = (event) => {
+    pupils.forEach((pupil) => {
+      const eye = pupil.parentElement;
+      const rect = eye.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const angle = Math.atan2(event.clientY - centerY, event.clientX - centerX);
+      const radius = Math.min(rect.width, rect.height) * 0.18;
+      pupil.style.transform = `translate(calc(-50% + ${Math.cos(angle) * radius}px), calc(-50% + ${Math.sin(angle) * radius}px))`;
+    });
+  };
+
+  const resetEyes = () => {
+    pupils.forEach((pupil) => {
+      pupil.style.transform = "translate(-50%, -50%)";
+    });
+  };
+
+  window.addEventListener("pointermove", moveEyes);
+  window.addEventListener("pointerleave", resetEyes);
+  pageMotionCleanups.push(() => {
+    window.removeEventListener("pointermove", moveEyes);
+    window.removeEventListener("pointerleave", resetEyes);
+  });
+};
+
+const initFaqAccordion = () => {
+  const faqItems = app.querySelectorAll(".faq-item");
+  if (!faqItems.length) return;
+
+  faqItems.forEach(item => {
+    const question = item.querySelector(".faq-question");
+    const answer = item.querySelector(".faq-answer");
+    const toggle = item.querySelector(".faq-toggle");
+
+    question.addEventListener("click", () => {
+      const isOpen = item.classList.contains("open");
+      faqItems.forEach(i => {
+        i.classList.remove("open");
+        const a = i.querySelector(".faq-answer");
+        const t = i.querySelector(".faq-toggle");
+        if (a) a.style.maxHeight = null;
+        if (t) t.textContent = "+";
+      });
+      if (!isOpen) {
+        item.classList.add("open");
+        if (answer) answer.style.maxHeight = answer.scrollHeight + "px";
+        if (toggle) toggle.textContent = "−";
+      }
+    });
+  });
+};
+
+const initGuideFlipbook = () => {
+  const flipbook = app.querySelector("[data-guide-flipbook]");
+  if (!flipbook || flipbook.dataset.flipReady) return;
+  flipbook.dataset.flipReady = "true";
+
+  const pages = [...flipbook.querySelectorAll("[data-guide-page]")];
+  const dots = [...flipbook.querySelectorAll(".guide-flip-dots span")];
+  const controls = [...flipbook.querySelectorAll("[data-guide-flip]")];
+  let activePage = 0;
+
+  const setPage = (nextPage) => {
+    activePage = (nextPage + pages.length) % pages.length;
+    pages.forEach((page, index) => {
+      page.classList.toggle("is-active", index === activePage);
+      page.classList.toggle("is-before", index < activePage);
+    });
+    dots.forEach((dot, index) => {
+      dot.classList.toggle("active", index === activePage);
+    });
+  };
+
+  controls.forEach((control) => {
+    control.addEventListener("click", () => {
+      setPage(activePage + (control.dataset.guideFlip === "next" ? 1 : -1));
+    });
+  });
+};
+
+const initFormValidationMode = () => {
+  app.querySelectorAll("form").forEach((form) => {
+    form.noValidate = true;
   });
 };
 
 const initPagePlugins = () => {
+  initFormValidationMode();
+  initSmoothScrollEngine();
   initLeafletMap();
   initCollectionMap();
   initQrGenerator();
   initReportChart();
   initThreeGame();
   initScanVerificationPrompt();
+  if (role() === "user" && state.page === "select-waste" && state.locationCheck?.verified) {
+    initAiSensorCameras();
+  }
+  initScrollProgress();
+  initViewportMotion();
+  initStickyStoryMotion();
+  initBinBurstMotion();
+  initRouteMapMotion();
+  initGlobalPageAnimations();
+  initAuthMascotMotion();
   initHomeAnimations();
+  initFaqAccordion();
+  initGuideFlipbook();
+  ScrollTrigger.refresh();
 };
 
 const makeTextSprite = (text, color = "#10251d") => {
@@ -1204,9 +1980,10 @@ const createBin = ({ type, color, x }) => {
 
 const createRubbish = (item) => {
   const colors = {
-    Plastic: 0x1f7a45,
     Paper: 0x1f5d99,
-    "General Waste": 0xd8a21d,
+    Plastic: 0x1f7a45,
+    "Aluminium": 0xd8a21d,
+    "General Waste": 0x2b2f32,
   };
   const material = new THREE.MeshStandardMaterial({ color: colors[item.bin] || 0x8fd6d2, roughness: 0.48 });
   const group = new THREE.Group();
@@ -1233,6 +2010,13 @@ const createRubbish = (item) => {
     const flap = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.05, 0.28), new THREE.MeshStandardMaterial({ color: 0xc49a45 }));
     flap.position.set(0, 0.31, -0.2);
     group.add(box, flap);
+  } else if (item.shape === "can") {
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.72, 32), material);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.255, 0.255, 0.035, 32), new THREE.MeshStandardMaterial({ color: 0xd9e4df, metalness: 0.55, roughness: 0.28 }));
+    const bottom = top.clone();
+    top.position.y = 0.38;
+    bottom.position.y = -0.38;
+    group.add(body, top, bottom);
   } else if (item.shape === "wrapper") {
     const wrapper = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.12, 0.44), material);
     wrapper.rotation.set(0.2, 0.4, -0.15);
@@ -1297,9 +2081,10 @@ const initThreeGame = () => {
   scene.add(floor);
 
   const bins = [
-    createBin({ type: "Plastic", color: 0x1f7a45, x: -2.4 }),
-    createBin({ type: "Paper", color: 0x1f5d99, x: 0 }),
-    createBin({ type: "General Waste", color: 0xd8a21d, x: 2.4 }),
+    createBin({ type: "Paper", color: 0x1f5d99, x: -3.6 }),
+    createBin({ type: "Plastic", color: 0x1f7a45, x: -1.2 }),
+    createBin({ type: "Aluminium", color: 0xd8a21d, x: 1.2 }),
+    createBin({ type: "General Waste", color: 0x2b2f32, x: 3.6 }),
   ];
   bins.forEach((bin) => scene.add(bin));
 
@@ -1476,6 +2261,12 @@ const startScanner = async () => {
 
 const initIncomingBinFromUrl = () => {
   const params = new URLSearchParams(window.location.search);
+  const page = params.get("page");
+  if (page && routeSets[role()]?.includes(page)) {
+    state.page = page;
+    saveState();
+  }
+
   const stationCode = params.get("station");
   if (stationCode) {
     handleStationFromQr(stationCode);
@@ -1486,14 +2277,156 @@ const initIncomingBinFromUrl = () => {
   if (binId) handleBinFromQr(binId);
 };
 
+const registerServiceWorker = () => {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").then((registration) => {
+      const showUpdateReady = (worker) => {
+        waitingServiceWorker = worker;
+        Swal.fire({
+          title: "Update available",
+          text: "A newer EcoCycle version is ready.",
+          icon: "info",
+          showCancelButton: true,
+          confirmButtonText: "Update now",
+          cancelButtonText: "Later",
+          confirmButtonColor: "#0b0b0d",
+        }).then((result) => {
+          if (result.isConfirmed) waitingServiceWorker?.postMessage({ type: "SKIP_WAITING" });
+        });
+      };
+
+      if (registration.waiting && navigator.serviceWorker.controller) showUpdateReady(registration.waiting);
+
+      registration.addEventListener("updatefound", () => {
+        const worker = registration.installing;
+        if (!worker) return;
+        worker.addEventListener("statechange", () => {
+          if (worker.state === "installed" && navigator.serviceWorker.controller) showUpdateReady(worker);
+        });
+      });
+    }).catch(() => {
+      // The app still works normally if the browser blocks service workers.
+    });
+  });
+
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+};
+
+const renderInstallPrompt = () => {
+  let prompt = document.querySelector("#installPrompt");
+  if (!prompt) {
+    prompt = document.createElement("div");
+    prompt.id = "installPrompt";
+    prompt.className = "install-prompt hidden";
+    prompt.innerHTML = `
+      <div>
+        <strong>Install EcoCycle</strong>
+        <span>Add it to your phone for a full-screen app experience.</span>
+      </div>
+      <button class="primary-btn" data-action="install-pwa">Install</button>
+    `;
+    document.body.appendChild(prompt);
+  }
+
+  prompt.classList.toggle("hidden", !deferredInstallPrompt);
+};
+
+const isStandaloneApp = () =>
+  window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+
+const installHelpText = () => {
+  const isAppleMobile = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+  if (isAppleMobile) {
+    return "On iPhone or iPad, open this site in Safari, tap Share, then choose Add to Home Screen.";
+  }
+
+  return "On desktop or Android Chrome, use the Install icon in the address bar or browser menu. If it does not appear yet, refresh once and try again.";
+};
+
+const showInstallPrompt = async () => {
+  if (isStandaloneApp()) {
+    showToast("EcoCycle is already installed.");
+    return;
+  }
+
+  if (!deferredInstallPrompt) {
+    Swal.fire({
+      title: "Install EcoCycle",
+      text: installHelpText(),
+      icon: "info",
+      confirmButtonText: "Got it",
+      confirmButtonColor: "#0b0b0d",
+    });
+    return;
+  }
+
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  renderInstallPrompt();
+};
+
+const initPwaInstallPrompt = () => {
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    renderInstallPrompt();
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    renderInstallPrompt();
+    showToast("EcoCycle installed.");
+  });
+};
+
+const renderNetworkStatus = () => {
+  let prompt = document.querySelector("#networkStatus");
+  if (!prompt) {
+    prompt = document.createElement("div");
+    prompt.id = "networkStatus";
+    prompt.className = "install-prompt network-status hidden";
+    prompt.innerHTML = `
+      <div>
+        <strong>Offline mode</strong>
+        <span>You can keep browsing cached pages. Live sync resumes when connection returns.</span>
+      </div>
+    `;
+    document.body.appendChild(prompt);
+  }
+
+  prompt.classList.toggle("hidden", navigator.onLine);
+};
+
+const initNetworkStatus = () => {
+  renderNetworkStatus();
+  window.addEventListener("online", () => {
+    renderNetworkStatus();
+    showToast("Back online. Sync can resume.");
+  });
+  window.addEventListener("offline", renderNetworkStatus);
+};
+
+const startApp = async () => {
+  render();
+  await initializeDatabase();
+  initIncomingBinFromUrl();
+  appReady = true;
+  render();
+};
+
 document.addEventListener("click", handleClick);
 document.addEventListener("submit", handleSubmit);
 document.addEventListener("input", handleChange);
 document.addEventListener("change", handleChange);
 
-initIncomingBinFromUrl();
-render();
-window.setTimeout(() => {
-  appReady = true;
-  render();
-}, 900);
+registerServiceWorker();
+initPwaInstallPrompt();
+initNetworkStatus();
+startApp();

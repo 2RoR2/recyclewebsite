@@ -1,18 +1,21 @@
-export const wasteTypes = ["Plastic", "Paper", "Metal", "Glass", "Food Waste", "General Waste"];
+import { loadFirebaseState, queueFirebaseSync } from "./firebaseStore.js";
+
+export const wasteTypes = ["Paper", "Plastic", "Aluminium", "General Waste"];
 
 export const wasteGuide = [
-  ["Plastic", "Plastic bottles, clean containers, packaging trays", "Empty and rinse plastic items before disposal. Avoid food-stained plastic."],
-  ["Paper", "Office paper, cardboard, newspapers, paper bags", "Keep paper dry. Wet or oily paper should go to general waste."],
-  ["General Waste", "Used tissue, dirty wrappers, mixed or contaminated waste", "Use this bin when the item cannot be cleaned or recycled."],
+  ["Paper", "PAPER, CARDBOARD, NEWSPAPERS", "Keep paper clean and dry. Flatten cardboard before disposal and avoid food-stained paper."],
+  ["Plastic", "PLASTIC BOTTLES, CLEAN CONTAINERS", "Empty, rinse, and dry plastic items before disposal. Avoid food-contaminated or mixed-material plastic."],
+  ["Aluminium", "ALUMINIUM CANS, BEVERAGE TINS", "Empty aluminium items before disposal. Avoid food-contaminated or mixed-material items."],
+  ["General Waste", "FOOD WRAPPERS, TISSUES, CONTAMINATED PACKAGING", "Use this for dirty, mixed-material, or non-recyclable rubbish that does not belong in Paper, Plastic, or Aluminium bins."],
 ];
 
 export const gameItems = [
-  { id: "g1", name: "Plastic Bottle", bin: "Plastic", shape: "bottle" },
-  { id: "g2", name: "Plastic Cup", bin: "Plastic", shape: "cup" },
-  { id: "g3", name: "Newspaper", bin: "Paper", shape: "paper" },
+  { id: "g1", name: "Newspaper", bin: "Paper", shape: "paper" },
+  { id: "g2", name: "Plastic Bottle", bin: "Plastic", shape: "bottle" },
+  { id: "g3", name: "Food Wrapper", bin: "General Waste", shape: "wrapper" },
   { id: "g4", name: "Cardboard Box", bin: "Paper", shape: "box" },
-  { id: "g5", name: "Used Tissue", bin: "General Waste", shape: "crumple" },
-  { id: "g6", name: "Food Wrapper", bin: "General Waste", shape: "wrapper" },
+  { id: "g5", name: "Soda Can", bin: "Aluminium", shape: "can" },
+  { id: "g6", name: "Used Tissue", bin: "General Waste", shape: "paper" },
 ];
 
 const storageKey = "recycle-platform-state";
@@ -26,18 +29,20 @@ export const collectionLocation = {
 };
 
 const stationLocations = [
-  { code: "GAL", name: "Galacity", location: "Galacity, Kuching", lat: 1.5155, lng: 110.3737, mapX: 57, mapY: 50 },
-  { code: "SAR", name: "Saradise", location: "Saradise, Kuching", lat: 1.5187, lng: 110.3669, mapX: 55, mapY: 48 },
-  { code: "EMT", name: "Emart Batu Kawa", location: "Emart Batu Kawa, Kuching", lat: 1.5169, lng: 110.3009, mapX: 32, mapY: 52 },
-  { code: "WFT", name: "Waterfront", location: "Kuching Waterfront", lat: 1.5608, lng: 110.3446, mapX: 48, mapY: 24 },
-  { code: "TAB", name: "Tabuan", location: "Tabuan, Kuching", lat: 1.5147, lng: 110.3804, mapX: 64, mapY: 54 },
-  { code: "KSM", name: "Kota Samarahan", location: "Kota Samarahan, Sarawak", lat: 1.4655, lng: 110.4477, mapX: 78, mapY: 72 },
+  { code: "PEA", name: "Peach Garden", location: "Jalan Song, Kuching", lat: 1.5120, lng: 110.3546, mapX: 59, mapY: 47 },
+  { code: "TAB", name: "Tabuan", location: "Tabuan, Kuching", lat: 1.5284, lng: 110.3667, mapX: 61, mapY: 48 },
+  { code: "GAL", name: "Galacity", location: "Galacity, Kuching", lat: 1.5119851, lng: 110.3524077, mapX: 57, mapY: 50 },
+  { code: "SAR", name: "Saradise", location: "Saradise, Kuching", lat: 1.505577, lng: 110.361176, mapX: 58, mapY: 46 },
+  { code: "BTK", name: "Batu Kawa", location: "Batu Kawa, Kuching", lat: 1.5067389, lng: 110.2968331, mapX: 32, mapY: 52 },
+  { code: "UNI", name: "UNIMAS", location: "UNIMAS, Samarahan", lat: 1.4932572, lng: 110.3556421, mapX: 73, mapY: 70 },
+  { code: "UIT", name: "UiTM Samarahan", location: "UiTM Samarahan Campus", lat: 1.4499216, lng: 110.4241274, mapX: 79, mapY: 72 },
 ];
 
 const binTypes = [
-  { suffix: "PLA", label: "Plastic", offset: -0.00008 },
-  { suffix: "PAP", label: "Paper", offset: 0 },
-  { suffix: "GEN", label: "General Waste", offset: 0.00008 },
+  { suffix: "PAP", label: "Paper", offset: -0.00012 },
+  { suffix: "PLA", label: "Plastic", offset: -0.00004 },
+  { suffix: "ALU", label: "Aluminium", offset: 0.00004 },
+  { suffix: "GEN", label: "General Waste", offset: 0.00012 },
 ];
 
 const defaultBins = stationLocations.flatMap((station, stationIndex) =>
@@ -57,11 +62,13 @@ const defaultBins = stationLocations.flatMap((station, stationIndex) =>
 );
 
 const defaultRewards = [
-  { id: 1, name: "TNG Reload PIN RM5", points: 5, stock: 40, desc: "Touch 'n Go reload PIN worth RM5." },
-  { id: 2, name: "TNG Reload PIN RM10", points: 10, stock: 30, desc: "Touch 'n Go reload PIN worth RM10." },
-  { id: 3, name: "TNG Reload PIN RM30", points: 30, stock: 15, desc: "Touch 'n Go reload PIN worth RM30." },
-  { id: 4, name: "Electricity Bill Discount 20%", points: 20, stock: 20, desc: "Redeem a 20% discount support voucher for electricity bill payment." },
-  { id: 5, name: "Water Bill Discount 20%", points: 20, stock: 20, desc: "Redeem a 20% discount support voucher for water bill payment." },
+  { id: 1, name: "TNG Reload PIN RM5", points: 50, stock: 180, desc: "Touch 'n Go reload PIN worth RM5.", image: "reloadpinRM5.png" },
+  { id: 2, name: "TNG Reload PIN RM10", points: 100, stock: 190, desc: "Touch 'n Go reload PIN worth RM10.", image: "reloadpinRM10.png" },
+  { id: 3, name: "TNG Reload PIN RM30", points: 300, stock: 200, desc: "Touch 'n Go reload PIN worth RM30.", image: "reloadpinRM30.png" },
+  { id: 4, name: "Electricity Bill Discount 20%", points: 200, stock: 200, desc: "Redeem a 20% discount support voucher for electricity bill payment.", image: "electricalbill.jpeg" },
+  { id: 5, name: "Water Bill Discount 20%", points: 200, stock: 200, desc: "Redeem a 20% discount support voucher for water bill payment.", image: "waterbill.jpeg" },
+  { id: 6, name: "Emart Cash Voucher RM5", points: 120, stock: 150, desc: "Cash voucher for Emart Supermarket.", image: "emart.jpeg" },
+  { id: 7, name: "Rainforest Music Festival Ticket", points: 250, stock: 100, desc: "Entrance ticket for RWMF Sarawak.", image: "rainforest.jpeg" },
 ];
 
 const defaultState = {
@@ -96,7 +103,6 @@ const defaultState = {
       password: "123456",
       role: "user",
       points: 5,
-      penalties: 0,
       avatar: "",
       phone: "",
       location: "Kuching, Sarawak",
@@ -110,7 +116,6 @@ const defaultState = {
       password: "admin123",
       role: "admin",
       points: 0,
-      penalties: 0,
       avatar: "",
       phone: "",
       location: "Admin Office",
@@ -128,6 +133,12 @@ const defaultState = {
 
 const canUseStorage = () => typeof window !== "undefined" && "localStorage" in window;
 
+const normalizeCategoryLabel = (value) => {
+  if (value === "Metal" || value === "Aluminium Can") return "Aluminium";
+  if (value === "Glass" || value === "E-Waste" || value === "e-waste") return "General Waste";
+  return value;
+};
+
 const loadState = () => {
   if (!canUseStorage()) return structuredClone(defaultState);
 
@@ -142,7 +153,13 @@ const loadState = () => {
 
 const normalizeBins = (bins) => {
   const defaultIds = new Set(defaultBins.map((bin) => bin.id));
-  const customBins = bins.filter((bin) => !defaultIds.has(bin.id));
+  const removedStationNames = new Set(["Kota Samarahan", "Waterfront", "Tabuan", "Emart Batu Kawa"]);
+  const customBins = bins
+    .filter((bin) => !defaultIds.has(bin.id) && !removedStationNames.has(bin.station))
+    .map((bin) => ({
+      ...bin,
+      accepts: normalizeCategoryLabel(bin.accepts),
+    }));
 
   return [
     ...defaultBins.map((defaultBin) => {
@@ -157,17 +174,16 @@ const normalizeBins = (bins) => {
 };
 
 const normalizeRewards = (rewards) => {
-  const defaultIds = new Set(defaultRewards.map((reward) => reward.id));
-  const customRewards = rewards.filter((reward) => !defaultIds.has(reward.id));
+  const defaultIds = new Set(defaultRewards.map((reward) => String(reward.id)));
+  const customRewards = rewards
+    .filter((reward) => !defaultIds.has(String(reward.id)))
+    .map((reward) => ({
+      ...reward,
+      id: /^\d+$/.test(String(reward.id)) ? Number(reward.id) : reward.id,
+    }));
 
   return [
-    ...defaultRewards.map((defaultReward) => {
-      const savedReward = rewards.find((reward) => reward.id === defaultReward.id);
-      return {
-        ...defaultReward,
-        stock: savedReward?.stock ?? defaultReward.stock,
-      };
-    }),
+    ...defaultRewards,
     ...customRewards,
   ];
 };
@@ -198,14 +214,18 @@ const normalizeState = (loadedState) => {
     aiDetection: loadedState.aiDetection || null,
     autoRecordedDetectionId: loadedState.autoRecordedDetectionId || null,
     locationCheck: loadedState.locationCheck || { verified: false, distance: null },
-    users: loadedState.users.map((user) => ({
-      avatar: "",
-      phone: "",
-      notifications: true,
-      privacy: user.role === "admin" ? "Admin only" : "Public ranking",
-      ...user,
-      location: user.location === "Main Campus" ? "Kuching, Sarawak" : (user.location || (user.role === "admin" ? "Admin Office" : "Kuching, Sarawak")),
-    })),
+    users: loadedState.users.map((user) => {
+      const id = /^\d+$/.test(String(user.id)) ? Number(user.id) : user.id;
+      return {
+        avatar: "",
+        phone: "",
+        notifications: true,
+        privacy: user.role === "admin" ? "Admin only" : "Public ranking",
+        ...user,
+        id,
+        location: user.location === "Main Campus" ? "Kuching, Sarawak" : (user.location || (user.role === "admin" ? "Admin Office" : "Kuching, Sarawak")),
+      };
+    }),
     bins,
     rewards: normalizeRewards(loadedState.rewards || []),
     records: (loadedState.records || []).map((record) => {
@@ -221,6 +241,7 @@ const normalizeState = (loadedState) => {
         bin: matchedBin.name,
         location: matchedBin.location,
         expectedWaste: matchedBin.accepts,
+        detectedCategory: normalizeCategoryLabel(record.detectedCategory),
       };
     }),
     learningRecords: loadedState.learningRecords || [],
@@ -238,6 +259,18 @@ export const saveState = () => {
   if (!canUseStorage()) return;
 
   window.localStorage.setItem(storageKey, JSON.stringify(state));
+  queueFirebaseSync(state);
+};
+
+export const initializeDatabase = async () => {
+  const firebaseState = await loadFirebaseState();
+  if (firebaseState) {
+    Object.assign(state, normalizeState({ ...structuredClone(defaultState), ...firebaseState }));
+    saveState();
+    return;
+  }
+
+  queueFirebaseSync(state);
 };
 
 export const resetState = () => {

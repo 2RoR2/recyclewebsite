@@ -1,0 +1,544 @@
+{
+  "appConfig": {
+    "main": {
+      "projectId": "recyclewebsite123",
+      "categories": [
+        "Paper",
+        "Plastic",
+        "Aluminium",
+        "General Waste"
+      ],
+      "aiModelClasses": [
+        "paper",
+        "plastic",
+        "aluminium_can",
+        "general_waste"
+      ],
+      "updatedAt": "2026-05-19T09:11:54.148Z"
+    }
+  },
+  "categories": [
+    {
+      "id": "paper",
+      "name": "Paper",
+      "order": 1,
+      "active": true
+    },
+    {
+      "id": "plastic",
+      "name": "Plastic",
+      "order": 2,
+      "active": true
+    },
+    {
+      "id": "aluminium",
+      "name": "Aluminium",
+      "order": 3,
+      "active": true
+    },
+    {
+      "id": "general-waste",
+      "name": "General Waste",
+      "order": 4,
+      "active": true
+    }
+  ],
+  "wasteGuide": [
+    {
+      "id": "paper",
+      "type": "Paper",
+      "examples": "PAPER, CARDBOARD, NEWSPAPERS",
+      "tip": "Keep paper clean and dry. Flatten cardboard before disposal and avoid food-stained paper.",
+      "order": 1
+    },
+    {
+      "id": "plastic",
+      "type": "Plastic",
+      "examples": "PLASTIC BOTTLES, CLEAN CONTAINERS",
+      "tip": "Empty, rinse, and dry plastic items before disposal. Avoid food-contaminated or mixed-material plastic.",
+      "order": 2
+    },
+    {
+      "id": "aluminium",
+      "type": "Aluminium",
+      "examples": "ALUMINIUM CANS, BEVERAGE TINS",
+      "tip": "Empty aluminium items before disposal. Avoid food-contaminated or mixed-material items.",
+      "order": 3
+    },
+    {
+      "id": "general-waste",
+      "type": "General Waste",
+      "examples": "FOOD WRAPPERS, TISSUES, CONTAMINATED PACKAGING",
+      "tip": "Use this for dirty, mixed-material, or non-recyclable rubbish that does not belong in Paper, Plastic, or Aluminium bins.",
+      "order": 4
+    }
+  ],
+  "gameItems": [
+    {
+      "id": "g1",
+      "name": "Newspaper",
+      "bin": "Paper",
+      "shape": "paper"
+    },
+    {
+      "id": "g2",
+      "name": "Plastic Bottle",
+      "bin": "Plastic",
+      "shape": "bottle"
+    },
+    {
+      "id": "g3",
+      "name": "Food Wrapper",
+      "bin": "General Waste",
+      "shape": "wrapper"
+    },
+    {
+      "id": "g4",
+      "name": "Cardboard Box",
+      "bin": "Paper",
+      "shape": "box"
+    },
+    {
+      "id": "g5",
+      "name": "Soda Can",
+      "bin": "Aluminium",
+      "shape": "can"
+    },
+    {
+      "id": "g6",
+      "name": "Used Tissue",
+      "bin": "General Waste",
+      "shape": "paper"
+    }
+  ],
+  "collectionLocations": [
+    {
+      "id": "kuching-recycle-association",
+      "name": "Kuching Recycle Association",
+      "place": "Jalan Nanas, Kuching",
+      "address": "Lot 267, No. 10-A, Lorong 4, Nanas Road, 93400 Kuching, Sarawak, Malaysia",
+      "lat": 1.5491541,
+      "lng": 110.3345688
+    }
+  ],
+  "stations": [
+    {
+      "id": "GAL",
+      "code": "GAL",
+      "name": "Galacity",
+      "location": "Galacity, Kuching",
+      "lat": 1.5153800000000002,
+      "lng": 110.37358,
+      "mapX": 57,
+      "mapY": 50,
+      "binIds": [
+        "BIN-001",
+        "BIN-002",
+        "BIN-003",
+        "BIN-004"
+      ]
+    },
+    {
+      "id": "SAR",
+      "code": "SAR",
+      "name": "Saradise",
+      "location": "Jalan Song Peach Garden, Kuching",
+      "lat": 1.52648,
+      "lng": 110.37708,
+      "mapX": 59,
+      "mapY": 47,
+      "binIds": [
+        "BIN-005",
+        "BIN-006",
+        "BIN-007",
+        "BIN-008"
+      ]
+    },
+    {
+      "id": "BTK",
+      "code": "BTK",
+      "name": "Batu Kawa",
+      "location": "Batu Kawa, Kuching",
+      "lat": 1.51678,
+      "lng": 110.30078,
+      "mapX": 32,
+      "mapY": 52,
+      "binIds": [
+        "BIN-009",
+        "BIN-010",
+        "BIN-011",
+        "BIN-012"
+      ]
+    },
+    {
+      "id": "UNI",
+      "code": "UNI",
+      "name": "UNIMAS",
+      "location": "Universiti Malaysia Sarawak, Samarahan",
+      "lat": 1.46368,
+      "lng": 110.42868,
+      "mapX": 73,
+      "mapY": 70,
+      "binIds": [
+        "BIN-013",
+        "BIN-014",
+        "BIN-015",
+        "BIN-016"
+      ]
+    },
+    {
+      "id": "UIT",
+      "code": "UIT",
+      "name": "UiTM Samarahan",
+      "location": "UiTM Samarahan",
+      "lat": 1.46848,
+      "lng": 110.44998000000001,
+      "mapX": 79,
+      "mapY": 72,
+      "binIds": [
+        "BIN-017",
+        "BIN-018",
+        "BIN-019",
+        "BIN-020"
+      ]
+    }
+  ],
+  "bins": [
+    {
+      "id": "BIN-001",
+      "station": "Galacity",
+      "name": "Galacity Paper Bin",
+      "location": "Galacity, Kuching",
+      "status": "Available",
+      "accepts": "Paper",
+      "qrCode": "GAL-PAP",
+      "mapX": 57,
+      "mapY": 50,
+      "lat": 1.5153800000000002,
+      "lng": 110.37358
+    },
+    {
+      "id": "BIN-002",
+      "station": "Galacity",
+      "name": "Galacity Plastic Bin",
+      "location": "Galacity, Kuching",
+      "status": "Available",
+      "accepts": "Plastic",
+      "qrCode": "GAL-PLA",
+      "mapX": 57,
+      "mapY": 50,
+      "lat": 1.51546,
+      "lng": 110.37366
+    },
+    {
+      "id": "BIN-003",
+      "station": "Galacity",
+      "name": "Galacity Aluminium Bin",
+      "location": "Galacity, Kuching",
+      "status": "Available",
+      "accepts": "Aluminium",
+      "qrCode": "GAL-ALU",
+      "mapX": 57,
+      "mapY": 50,
+      "lat": 1.51554,
+      "lng": 110.37374
+    },
+    {
+      "id": "BIN-004",
+      "station": "Galacity",
+      "name": "Galacity General Waste Bin",
+      "location": "Galacity, Kuching",
+      "status": "Available",
+      "accepts": "General Waste",
+      "qrCode": "GAL-GEN",
+      "mapX": 57,
+      "mapY": 50,
+      "lat": 1.51562,
+      "lng": 110.37382
+    },
+    {
+      "id": "BIN-005",
+      "station": "Saradise",
+      "name": "Saradise Paper Bin",
+      "location": "Jalan Song Peach Garden, Kuching",
+      "status": "Available",
+      "accepts": "Paper",
+      "qrCode": "SAR-PAP",
+      "mapX": 59,
+      "mapY": 47,
+      "lat": 1.52648,
+      "lng": 110.37708
+    },
+    {
+      "id": "BIN-006",
+      "station": "Saradise",
+      "name": "Saradise Plastic Bin",
+      "location": "Jalan Song Peach Garden, Kuching",
+      "status": "Available",
+      "accepts": "Plastic",
+      "qrCode": "SAR-PLA",
+      "mapX": 59,
+      "mapY": 47,
+      "lat": 1.52656,
+      "lng": 110.37716
+    },
+    {
+      "id": "BIN-007",
+      "station": "Saradise",
+      "name": "Saradise Aluminium Bin",
+      "location": "Jalan Song Peach Garden, Kuching",
+      "status": "Available",
+      "accepts": "Aluminium",
+      "qrCode": "SAR-ALU",
+      "mapX": 59,
+      "mapY": 47,
+      "lat": 1.52664,
+      "lng": 110.37724
+    },
+    {
+      "id": "BIN-008",
+      "station": "Saradise",
+      "name": "Saradise General Waste Bin",
+      "location": "Jalan Song Peach Garden, Kuching",
+      "status": "Available",
+      "accepts": "General Waste",
+      "qrCode": "SAR-GEN",
+      "mapX": 59,
+      "mapY": 47,
+      "lat": 1.5267199999999999,
+      "lng": 110.37732
+    },
+    {
+      "id": "BIN-009",
+      "station": "Batu Kawa",
+      "name": "Batu Kawa Paper Bin",
+      "location": "Batu Kawa, Kuching",
+      "status": "Available",
+      "accepts": "Paper",
+      "qrCode": "BTK-PAP",
+      "mapX": 32,
+      "mapY": 52,
+      "lat": 1.51678,
+      "lng": 110.30078
+    },
+    {
+      "id": "BIN-010",
+      "station": "Batu Kawa",
+      "name": "Batu Kawa Plastic Bin",
+      "location": "Batu Kawa, Kuching",
+      "status": "Available",
+      "accepts": "Plastic",
+      "qrCode": "BTK-PLA",
+      "mapX": 32,
+      "mapY": 52,
+      "lat": 1.5168599999999999,
+      "lng": 110.30086
+    },
+    {
+      "id": "BIN-011",
+      "station": "Batu Kawa",
+      "name": "Batu Kawa Aluminium Bin",
+      "location": "Batu Kawa, Kuching",
+      "status": "Available",
+      "accepts": "Aluminium",
+      "qrCode": "BTK-ALU",
+      "mapX": 32,
+      "mapY": 52,
+      "lat": 1.51694,
+      "lng": 110.30094
+    },
+    {
+      "id": "BIN-012",
+      "station": "Batu Kawa",
+      "name": "Batu Kawa General Waste Bin",
+      "location": "Batu Kawa, Kuching",
+      "status": "Available",
+      "accepts": "General Waste",
+      "qrCode": "BTK-GEN",
+      "mapX": 32,
+      "mapY": 52,
+      "lat": 1.5170199999999998,
+      "lng": 110.30102
+    },
+    {
+      "id": "BIN-013",
+      "station": "UNIMAS",
+      "name": "UNIMAS Paper Bin",
+      "location": "Universiti Malaysia Sarawak, Samarahan",
+      "status": "Available",
+      "accepts": "Paper",
+      "qrCode": "UNI-PAP",
+      "mapX": 73,
+      "mapY": 70,
+      "lat": 1.46368,
+      "lng": 110.42868
+    },
+    {
+      "id": "BIN-014",
+      "station": "UNIMAS",
+      "name": "UNIMAS Plastic Bin",
+      "location": "Universiti Malaysia Sarawak, Samarahan",
+      "status": "Available",
+      "accepts": "Plastic",
+      "qrCode": "UNI-PLA",
+      "mapX": 73,
+      "mapY": 70,
+      "lat": 1.46376,
+      "lng": 110.42876
+    },
+    {
+      "id": "BIN-015",
+      "station": "UNIMAS",
+      "name": "UNIMAS Aluminium Bin",
+      "location": "Universiti Malaysia Sarawak, Samarahan",
+      "status": "Available",
+      "accepts": "Aluminium",
+      "qrCode": "UNI-ALU",
+      "mapX": 73,
+      "mapY": 70,
+      "lat": 1.46384,
+      "lng": 110.42884
+    },
+    {
+      "id": "BIN-016",
+      "station": "UNIMAS",
+      "name": "UNIMAS General Waste Bin",
+      "location": "Universiti Malaysia Sarawak, Samarahan",
+      "status": "Available",
+      "accepts": "General Waste",
+      "qrCode": "UNI-GEN",
+      "mapX": 73,
+      "mapY": 70,
+      "lat": 1.4639199999999999,
+      "lng": 110.42891999999999
+    },
+    {
+      "id": "BIN-017",
+      "station": "UiTM Samarahan",
+      "name": "UiTM Samarahan Paper Bin",
+      "location": "UiTM Samarahan",
+      "status": "Available",
+      "accepts": "Paper",
+      "qrCode": "UIT-PAP",
+      "mapX": 79,
+      "mapY": 72,
+      "lat": 1.46848,
+      "lng": 110.44998000000001
+    },
+    {
+      "id": "BIN-018",
+      "station": "UiTM Samarahan",
+      "name": "UiTM Samarahan Plastic Bin",
+      "location": "UiTM Samarahan",
+      "status": "Available",
+      "accepts": "Plastic",
+      "qrCode": "UIT-PLA",
+      "mapX": 79,
+      "mapY": 72,
+      "lat": 1.4685599999999999,
+      "lng": 110.45006000000001
+    },
+    {
+      "id": "BIN-019",
+      "station": "UiTM Samarahan",
+      "name": "UiTM Samarahan Aluminium Bin",
+      "location": "UiTM Samarahan",
+      "status": "Available",
+      "accepts": "Aluminium",
+      "qrCode": "UIT-ALU",
+      "mapX": 79,
+      "mapY": 72,
+      "lat": 1.46864,
+      "lng": 110.45014
+    },
+    {
+      "id": "BIN-020",
+      "station": "UiTM Samarahan",
+      "name": "UiTM Samarahan General Waste Bin",
+      "location": "UiTM Samarahan",
+      "status": "Available",
+      "accepts": "General Waste",
+      "qrCode": "UIT-GEN",
+      "mapX": 79,
+      "mapY": 72,
+      "lat": 1.4687199999999998,
+      "lng": 110.45022
+    }
+  ],
+  "rewards": [
+    {
+      "id": "1",
+      "name": "TNG Reload PIN RM5",
+      "points": 5,
+      "stock": 40,
+      "desc": "Touch 'n Go reload PIN worth RM5.",
+      "active": true
+    },
+    {
+      "id": "2",
+      "name": "TNG Reload PIN RM10",
+      "points": 10,
+      "stock": 30,
+      "desc": "Touch 'n Go reload PIN worth RM10.",
+      "active": true
+    },
+    {
+      "id": "3",
+      "name": "TNG Reload PIN RM30",
+      "points": 30,
+      "stock": 15,
+      "desc": "Touch 'n Go reload PIN worth RM30.",
+      "active": true
+    },
+    {
+      "id": "4",
+      "name": "Electricity Bill Discount 20%",
+      "points": 20,
+      "stock": 20,
+      "desc": "Redeem a 20% discount support voucher for electricity bill payment.",
+      "active": true
+    },
+    {
+      "id": "5",
+      "name": "Water Bill Discount 20%",
+      "points": 20,
+      "stock": 20,
+      "desc": "Redeem a 20% discount support voucher for water bill payment.",
+      "active": true
+    }
+  ],
+  "users": [
+    {
+      "id": "1",
+      "name": "Aina",
+      "email": "user@demo.com",
+      "role": "user",
+      "points": 5,
+      "avatar": "",
+      "phone": "",
+      "location": "Kuching, Sarawak",
+      "notifications": true,
+      "privacy": "Public ranking",
+      "authProvider": "demo-local",
+      "hasSeedPassword": true
+    },
+    {
+      "id": "2",
+      "name": "Admin",
+      "email": "admin@demo.com",
+      "role": "admin",
+      "points": 0,
+      "avatar": "",
+      "phone": "",
+      "location": "Admin Office",
+      "notifications": true,
+      "privacy": "Admin only",
+      "authProvider": "demo-local",
+      "hasSeedPassword": true
+    }
+  ],
+  "records": [],
+  "redeemed": [],
+  "feedback": [],
+  "learningRecords": []
+}

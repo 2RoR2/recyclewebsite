@@ -1,18 +1,11 @@
 const localHeuristic = (bytes, mimeType = "") => {
-  const total = bytes.reduce((sum, value) => sum + value, 0);
-  const score = total % 3;
-  const categories = [
-    { label: "plastic item", category: "Plastic" },
-    { label: "paper item", category: "Paper" },
-    { label: "general waste item", category: "General Waste" },
-  ];
-  const picked = categories[score];
   return {
-    ...picked,
-    confidence: 70 + (total % 25),
+    label: "uncertain waste item",
+    category: "General Waste",
+    confidence: 45,
     box: { x: 96, y: 72, width: 320, height: 320 },
     model: mimeType ? `Heuristic fallback (${mimeType})` : "Heuristic fallback",
-    presenceDetected: true,
+    presenceDetected: false,
   };
 };
 
@@ -23,8 +16,8 @@ const callOpenAI = async (imageDataUrl) => {
   const prompt = [
     "Classify the waste item in this image.",
     "Return strict JSON only with keys:",
-    "label (short string), category (Plastic|Paper|General Waste), confidence (0-100 number).",
-    "If uncertain, choose General Waste.",
+    "label (short string), category (Paper|Plastic|Aluminium|General Waste), confidence (0-100 number).",
+    "If uncertain or the item is contaminated, dirty, mixed-material, food waste, tissue, or non-recyclable rubbish, choose General Waste.",
   ].join(" ");
 
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -53,7 +46,7 @@ const callOpenAI = async (imageDataUrl) => {
             additionalProperties: false,
             properties: {
               label: { type: "string" },
-              category: { type: "string", enum: ["Plastic", "Paper", "General Waste"] },
+              category: { type: "string", enum: ["Paper", "Plastic", "Aluminium", "General Waste"] },
               confidence: { type: "number", minimum: 0, maximum: 100 },
             },
             required: ["label", "category", "confidence"],
@@ -110,4 +103,3 @@ export async function POST(request) {
     return Response.json({ error: `Detection failed: ${error.message}` }, { status: 500 });
   }
 }
-

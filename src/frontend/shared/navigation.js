@@ -9,9 +9,21 @@ const adminNavGroups = [
 ];
 
 const navForRole = () => {
+  if (role() === "guest") {
+    return [
+      ["home", "Home"],
+      ["recycle-guide", "Recycle Guide"],
+      ["news", "News"],
+      ["support", "Support"],
+
+    ];
+  }
+
   if (role() === "user") {
     return [
-      ["locations", "Bins"],
+      ["locations", "Location"],
+      ["maps", "Maps"],
+      ["scan", "Scan"],
       ["education", "Learn"],
       ["game", "Game"],
       ["rewards", "Redeem"],
@@ -43,12 +55,12 @@ const adminDesktopNav = () => `
     .join("")}
 `;
 
-const collapsedMenu = (items, dashboard = false) => `
+const collapsedMenu = (items, dashboard = false, anchorMode = false) => `
   <div class="dropdown main-menu">
-    <button class="dropdown-toggle nav-menu-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Menu</button>
+    <button class="dropdown-toggle nav-menu-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Open navigation menu">☰</button>
     <ul class="dropdown-menu dropdown-menu-dark">
       ${dashboard ? `<li><button class="dropdown-item ${state.page === "admin-dashboard" ? "active" : ""}" data-page="admin-dashboard">Dashboard</button></li>` : ""}
-      ${items.map(([page, label]) => `<li><button class="dropdown-item ${state.page === page ? "active" : ""}" data-page="${page}">${label}</button></li>`).join("")}
+      ${items.map(([page, label], index) => `<li><button class="dropdown-item ${anchorMode && index === 0 ? "active" : state.page === page ? "active" : ""}" ${anchorMode ? `data-anchor="${page}"` : `data-page="${page}"`}>${label}</button></li>`).join("")}
     </ul>
   </div>
 `;
@@ -70,13 +82,24 @@ export const renderNav = (navLinks, navActions) => {
         <div class="desktop-nav">${items.map(([page, label]) => `<button class="${state.page === page ? "active" : ""}" data-page="${page}">${label}</button>`).join("")}</div>
         <div class="mobile-nav">${collapsedMenu(items)}</div>
       `
-      : "";
+      : `
+        <div class="desktop-nav guest-desktop-nav">${items.map(([page, label]) => `<button class="${state.page === page ? "active" : ""}" data-page="${page}">${label}</button>`).join("")}</div>
+        <div class="mobile-nav">${collapsedMenu(items)}</div>
+      `;
   }
+
+  const installButton = `
+    <button class="install-nav-btn" data-action="install-pwa" type="button" aria-label="Install EcoCycle app" title="Install EcoCycle app">
+      <span aria-hidden="true">+</span>
+      <span>Install</span>
+    </button>
+  `;
 
   navActions.innerHTML = user
     ? `
+      ${installButton}
       <div class="dropdown account-menu">
-        <button class="account-chip ${["profile", "history", "points", "penalties", "learning-records", "my-redeemed", "collection"].includes(state.page) ? "active" : ""}" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Open account menu">
+        <button class="account-chip ${["profile", "history", "points", "learning-records", "my-redeemed", "collection"].includes(state.page) ? "active" : ""}" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Open account menu">
           ${user.avatar ? `<img src="${escapeHtml(user.avatar)}" alt="">` : `<span class="avatar-fallback">${escapeHtml(user.name.slice(0, 1))}</span>`}
           <span class="account-name">${escapeHtml(user.name)}</span>
         </button>
@@ -95,5 +118,5 @@ export const renderNav = (navLinks, navActions) => {
         </ul>
       </div>
     `
-    : `<button class="btn btn-outline-light btn-sm nav-btn ghost-btn" data-auth="register">Sign Up</button><button class="btn btn-success btn-sm nav-btn" data-auth="login">Login</button>`;
+    : `<button class="btn btn-success btn-sm nav-btn join-now-btn" data-auth="register">Join Now <span aria-hidden="true">+</span></button>`;
 };
