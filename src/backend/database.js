@@ -87,6 +87,7 @@ const defaultState = {
   historyFilterType: "All",
   adminUserFilterText: "",
   selectedManagedUserId: null,
+  deletedBinIds: [],
   sensorCheck: { captured: false, confidence: 0 },
   aiDetection: null,
   autoRecordedDetectionId: null,
@@ -151,8 +152,9 @@ const loadState = () => {
   }
 };
 
-const normalizeBins = (bins) => {
+const normalizeBins = (bins, deletedIds = []) => {
   const defaultIds = new Set(defaultBins.map((bin) => bin.id));
+  const deletedBinIds = new Set(deletedIds);
   const removedStationNames = new Set(["Kota Samarahan", "Waterfront", "Tabuan", "Emart Batu Kawa"]);
   const customBins = bins
     .filter((bin) => !defaultIds.has(bin.id) && !removedStationNames.has(bin.station))
@@ -162,7 +164,7 @@ const normalizeBins = (bins) => {
     }));
 
   return [
-    ...defaultBins.map((defaultBin) => {
+    ...defaultBins.filter((defaultBin) => !deletedBinIds.has(defaultBin.id)).map((defaultBin) => {
       const savedBin = bins.find((bin) => bin.id === defaultBin.id);
       return {
         ...defaultBin,
@@ -175,6 +177,7 @@ const normalizeBins = (bins) => {
 
 const normalizeRewards = (rewards) => {
   const defaultIds = new Set(defaultRewards.map((reward) => String(reward.id)));
+  const savedRewardById = new Map((rewards || []).map((reward) => [String(reward.id), reward]));
   const customRewards = rewards
     .filter((reward) => !defaultIds.has(String(reward.id)))
     .map((reward) => ({
@@ -183,13 +186,17 @@ const normalizeRewards = (rewards) => {
     }));
 
   return [
-    ...defaultRewards,
+    ...defaultRewards.map((defaultReward) => ({
+      ...defaultReward,
+      ...(savedRewardById.get(String(defaultReward.id)) || {}),
+      id: defaultReward.id,
+    })),
     ...customRewards,
   ];
 };
 
 const normalizeState = (loadedState) => {
-  const bins = normalizeBins(loadedState.bins);
+  const bins = normalizeBins(loadedState.bins, loadedState.deletedBinIds || []);
   const page = loadedState.page === "quiz"
     ? "game"
     : loadedState.page === "manage-quiz"
@@ -209,6 +216,7 @@ const normalizeState = (loadedState) => {
     historyFilterType: loadedState.historyFilterType || "All",
     adminUserFilterText: loadedState.adminUserFilterText || "",
     selectedManagedUserId: loadedState.selectedManagedUserId || null,
+    deletedBinIds: loadedState.deletedBinIds || [],
     rewardDrafts: loadedState.rewardDrafts || {},
     sensorCheck: loadedState.sensorCheck || { captured: false, confidence: 0 },
     aiDetection: loadedState.aiDetection || null,
@@ -248,6 +256,8 @@ const normalizeState = (loadedState) => {
     feedback: (loadedState.feedback || []).map((item) => ({
       userId: null,
       email: "Not recorded",
+      category: "General feedback",
+      source: "Contact form",
       ...item,
     })),
   };

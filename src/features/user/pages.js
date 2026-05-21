@@ -11,21 +11,31 @@ const redeemedCard = (item) => `
   </article>
 `;
 
+const rewardImage = (reward) => {
+  if (reward.image) return reward.image;
+  const name = reward.name.toLowerCase();
+  if (name.includes("rm5")) return "reloadpinRM5.png";
+  if (name.includes("rm10")) return "reloadpinRM10.png";
+  if (name.includes("rm30")) return "reloadpinRM30.png";
+  if (name.includes("electricity")) return "electricalbill.jpeg";
+  if (name.includes("water")) return "waterbill.jpeg";
+  if (name.includes("emart")) return "emart.jpeg";
+  if (name.includes("rainforest")) return "rainforest.jpeg";
+  return "reloadpinRM10.png";
+};
+
+const rewardImageSrc = (reward) => {
+  const image = rewardImage(reward);
+  return image.startsWith("data:") ? image : `/images/redeem/${image}`;
+};
+
 const renderSelectWaste = () => `
   ${(() => {
     const activeZone = state.sensorCheck?.manualZone || "";
     const zoneClass = (zone) => activeZone === zone ? "active" : "";
     return `
   <section class="page">
-    ${sectionTitle("Smart Bin Active", "Confirm location and prepare waste detection.")}
-    <div class="scanned-bin-hero panel card shadow-sm">
-      <p class="eyebrow">Scanned Bin</p>
-      <h1>${escapeHtml(selectedBin().name)}</h1>
-      <div class="mini-row">
-        <span>${escapeHtml(selectedBin().location)}</span>
-        <span>Bin type: <b data-active-zone-label>${escapeHtml(activeZone || selectedBin().accepts)}</b></span>
-      </div>
-    </div>
+    ${sectionTitle("Waste Detection", "Confirm location and prepare waste detection.")}
     <div class="panel card shadow-sm ai-scan-card">
       <div>
         <p class="eyebrow">${state.locationCheck?.verified ? "Ready" : "GPS Required"}</p>
@@ -54,19 +64,59 @@ const renderItemDetail = () => {
   const reward = selectedReward();
   const user = currentUser();
   if (!reward) return renderRewards({ user });
+  const pointGap = Math.max(0, reward.points - user.points);
+  const hasEnoughPoints = user.points >= reward.points;
+  const hasStock = reward.stock > 0;
+  const canRedeem = hasEnoughPoints && hasStock;
+  const ticketStatus = !hasStock
+    ? "Out of stock"
+    : hasEnoughPoints
+      ? "Ready to redeem"
+      : `${pointGap} more points needed`;
 
   return `
-    <section class="page auth-wrap">
-      <div class="panel auth-card card shadow-lg border-0">
-        <p class="eyebrow">Item Detail</p>
-        <h1>${escapeHtml(reward.name)}</h1>
-        <p class="lead">${escapeHtml(reward.desc)}</p>
-        <div class="grid-3">
-          ${stat("Required Points", reward.points)}
-          ${stat("Stock", reward.stock)}
-          ${stat("Your Points", user.points)}
+    <section class="page item-detail-page">
+      <div class="ticket-detail-shell">
+        <button class="ticket-back-btn" type="button" data-page="rewards">Back to rewards</button>
+        <article class="reward-ticket ${canRedeem ? "is-ready" : "is-locked"}">
+          <div class="ticket-main">
+            <div class="ticket-media">
+              <img src="${escapeHtml(rewardImageSrc(reward))}" alt="${escapeHtml(reward.name)}">
+            </div>
+            <div class="ticket-copy">
+              <p class="eyebrow">Item Detail</p>
+              <h1>${escapeHtml(reward.name)}</h1>
+              <p class="lead">${escapeHtml(reward.desc)}</p>
+              <div class="ticket-status-row">
+                <span>${escapeHtml(ticketStatus)}</span>
+                <span>${escapeHtml(reward.stock > 0 ? "Available now" : "Check again later")}</span>
+              </div>
+            </div>
+          </div>
+          <div class="ticket-divider" aria-hidden="true"></div>
+          <aside class="ticket-stub">
+            <p class="eyebrow">EcoCycle Reward</p>
+            <div class="ticket-code">ECO-${String(reward.id).padStart(3, "0")}</div>
+            <div class="ticket-metrics">
+              <span><b>${reward.points}</b>Required points</span>
+              <span><b>${user.points}</b>Your points</span>
+              <span><b>${reward.stock}</b>Stock left</span>
+            </div>
+            ${canRedeem
+              ? `<button class="btn btn-success primary-btn" data-page="redeem-confirm">Continue</button>`
+              : `<button class="btn btn-success primary-btn" disabled>${hasStock ? "Not enough points" : "Out of stock"}</button>`}
+          </aside>
+        </article>
+        <div class="ticket-help-grid">
+          <article>
+            <strong>How collection works</strong>
+            <p>After confirmation, admin approval is required before you receive your pickup code.</p>
+          </article>
+          <article>
+            <strong>Keep recycling</strong>
+            <p>Correct smart-bin scans add points and help unlock more rewards.</p>
+          </article>
         </div>
-        <button class="btn btn-success primary-btn" data-page="redeem-confirm">Continue</button>
       </div>
     </section>
   `;
@@ -213,8 +263,11 @@ const renderGame = () => {
           <span>General Waste</span>
         </div>
       </div>
-      <div id="threeGame" class="three-game" data-items='${gamePayload}'></div>
-      <p class="lead game-hint">Tip: practise here first so you choose the correct bin during real scans.</p>
+      <div class="three-game-stage">
+        <div id="gameItemBadge" class="game-item-badge">Current item</div>
+        <div id="threeGame" class="three-game" data-items='${gamePayload}'></div>
+      </div>
+      <p class="lead game-hint">Tip: practice here first so you choose the correct bin during real scans.</p>
     </div>
   </section>
 `;

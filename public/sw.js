@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v8";
+const CACHE_VERSION = "v10";
 const CACHE_NAME = `ecocycle-shell-${CACHE_VERSION}`;
 const APP_SHELL = [
   "/",
@@ -7,12 +7,6 @@ const APP_SHELL = [
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/images/recycle-logo.png",
-  "/images/recycle-hero.png",
-  "/images/recycle-people.jpg",
-  "/images/recycle-tree.png",
-  "/images/recycle-flow.png",
-  "/images/recycle-rewards.png",
-  "/images/recycle-locate.jpg",
   "/images/qrscan.png"
 ];
 

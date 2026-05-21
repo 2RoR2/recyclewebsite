@@ -91,6 +91,7 @@ const renderSupport = () => `
           <p>Use one clear report for bin overflow, QR scan trouble, location corrections, reward questions, or recycling guidance.</p>
         </div>
         <form class="support-contact-form" data-form="feedback">
+          <input name="source" type="hidden" value="Support page">
           <label>Issue type
             <select name="category" required>
               <option value="">Choose a topic</option>
@@ -131,7 +132,7 @@ const renderHome = () => `
     <div class="sarawak-hero-bg" aria-hidden="true">
       <iframe
         id="heroVideoBg"
-        src="https://www.youtube.com/embed/KIQueYmDWEQ?si=AgFBOfUsVvtrAmkD&autoplay=1&mute=1&controls=0&loop=1&playlist=KIQueYmDWEQ&playsinline=1&modestbranding=1&rel=0&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1"
+        src="https://www.youtube-nocookie.com/embed/KIQueYmDWEQ?autoplay=1&mute=1&controls=0&loop=1&playlist=KIQueYmDWEQ&playsinline=1&modestbranding=1&rel=0&disablekb=1&fs=0&iv_load_policy=3"
         title="EcoCycle background video"
         tabindex="-1"
         frameborder="0"
@@ -368,7 +369,9 @@ const renderHomeContactSections = () => `
       <h2>Send feedback or ask about a recycle point.</h2>
     </div>
     <form class="newsletter-form" data-form="feedback">
-      <input name="issue" type="text" placeholder="Example: Saradise aluminium bin needs attention" aria-label="Feedback">
+      <input name="source" type="hidden" value="Stay Updated">
+      <input name="category" type="hidden" value="Recycle point question">
+      <input name="issue" type="text" placeholder="Example: Saradise aluminium bin needs attention" aria-label="Feedback" required>
       <button class="primary-btn" type="submit">Send -&gt;</button>
     </form>
   </section>
@@ -447,10 +450,6 @@ const renderAuth = ({ embedded = false } = {}) => {
             </label>
             <button class="btn btn-success primary-btn" type="submit">${isLogin ? "Login" : "Sign Up"}</button>
           </form>
-          <div class="demo-row">
-            <button class="btn btn-outline-success ghost-btn" data-demo="user">Fill User Demo</button>
-            <button class="btn btn-outline-success ghost-btn" data-demo="admin">Fill Admin Demo</button>
-          </div>
           ${embedded ? "" : `<button class="btn btn-light text-btn" data-auth="${isLogin ? "register" : "login"}">${isLogin ? "Need an account? Sign up" : "Already have an account? Login"}</button>`}
         </div>
       </div>

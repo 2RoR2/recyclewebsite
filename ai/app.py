@@ -77,6 +77,17 @@ def image_array(image_bytes):
     return np.expand_dims(np.asarray(image), axis=0)
 
 
+def confidence_from_predictions(prediction):
+    ordered_indexes = np.argsort(prediction)[::-1]
+    top_index = int(ordered_indexes[0])
+    top_score = float(prediction[top_index])
+    second_score = float(prediction[int(ordered_indexes[1])]) if len(ordered_indexes) > 1 else 0.0
+    margin = max(0.0, top_score - second_score)
+    raw_confidence = round(top_score * 100)
+    decision_confidence = round(max(raw_confidence, min(96, 50 + (margin * 100))))
+    return top_index, raw_confidence, decision_confidence, ordered_indexes[:3]
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "modelReady": MODEL_PATH.exists()}
@@ -90,27 +101,45 @@ async def detect_waste(image: UploadFile = File(...)):
     if model is not None:
         array = image_array(image_bytes).astype(np.float32)
         prediction = model.predict(array, verbose=0)[0]
-        index = int(np.argmax(prediction))
+        index, raw_confidence, confidence, top_indexes = confidence_from_predictions(prediction)
         label = class_names[index]
-        confidence = round(float(prediction[index]) * 100)
         category = normalize_category(label)
         model_name = "Custom TensorFlow waste classifier"
+        top_predictions = [
+            {
+                "label": class_names[int(item)].replace("_", " "),
+                "category": normalize_category(class_names[int(item)]),
+                "confidence": round(float(prediction[int(item)]) * 100),
+            }
+            for item in top_indexes
+        ]
     else:
         array = tf.keras.applications.mobilenet_v2.preprocess_input(image_array(image_bytes).astype(np.float32))
         prediction = load_imagenet_model().predict(array, verbose=0)
         decoded_prediction = tf.keras.applications.mobilenet_v2.decode_predictions(prediction, top=1)[0][0]
         label = decoded_prediction[1]
         confidence = round(float(decoded_prediction[2]) * 100)
+        raw_confidence = confidence
         category = normalize_category(label)
         model_name = "MobileNetV2 ImageNet fallback"
+        top_predictions = [
+            {
+                "label": label.replace("_", " "),
+                "category": category,
+                "confidence": confidence,
+            }
+        ]
 
     return {
         "label": label.replace("_", " "),
         "category": category,
         "confidence": confidence,
+        "rawConfidence": raw_confidence,
+        "topPredictions": top_predictions,
         "box": {"x": 96, "y": 72, "width": 320, "height": 320},
         "model": model_name,
         "presenceDetected": True,
+        "detectorAvailable": True,
     }
 
 

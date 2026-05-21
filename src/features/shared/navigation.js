@@ -57,7 +57,9 @@ const adminDesktopNav = () => `
 
 const collapsedMenu = (items, dashboard = false, anchorMode = false) => `
   <div class="dropdown main-menu">
-    <button class="dropdown-toggle nav-menu-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Open navigation menu">☰</button>
+    <button class="dropdown-toggle nav-menu-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Open navigation menu">
+      <span aria-hidden="true">Menu</span>
+    </button>
     <ul class="dropdown-menu dropdown-menu-dark">
       ${dashboard ? `<li><button class="dropdown-item ${state.page === "admin-dashboard" ? "active" : ""}" data-page="admin-dashboard">Dashboard</button></li>` : ""}
       ${items.map(([page, label], index) => `<li><button class="dropdown-item ${anchorMode && index === 0 ? "active" : state.page === page ? "active" : ""}" ${anchorMode ? `data-anchor="${page}"` : `data-page="${page}"`}>${label}</button></li>`).join("")}
@@ -118,5 +120,8 @@ export const renderNav = (navLinks, navActions) => {
         </ul>
       </div>
     `
-    : `<button class="btn btn-success btn-sm nav-btn join-now-btn" data-auth="register">Join Now <span aria-hidden="true">+</span></button>`;
+    : `
+      <button class="btn btn-success btn-sm nav-btn join-now-btn" data-auth="register" type="button">Join Now <span aria-hidden="true">+</span></button>
+      ${installButton}
+    `;
 };

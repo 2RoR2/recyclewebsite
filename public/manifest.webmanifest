@@ -2,6 +2,7 @@
   "name": "EcoCycle Sarawak",
   "short_name": "EcoCycle",
   "description": "Industry-style Sarawak waste sorting app for Paper, Plastic, Aluminium Can, and General Waste with QR scanning, GPS checks, rewards, and admin tools.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -36,7 +37,7 @@
       "short_name": "Bins",
       "description": "View nearby EcoCycle bin locations.",
       "url": "/?page=locations",
-      "icons": [{ "src": "/images/recycle-locate.jpg", "sizes": "192x192", "type": "image/jpeg" }]
+      "icons": [{ "src": "/images/recycle-logo.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

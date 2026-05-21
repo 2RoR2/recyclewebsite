@@ -274,27 +274,84 @@ export const rewardService = {
 };
 
 export const adminService = {
-  addBin() {
-    const id = `BIN-${String(state.bins.length + 1).padStart(3, "0")}`;
-    const offset = state.bins.length * 0.00018;
+  addBin(formData) {
+    const station = formData?.get("station")?.trim() || "Custom Station";
+    const accepts = formData?.get("accepts")?.trim() || ["Paper", "Plastic", "Aluminium", "General Waste"][state.bins.length % 4];
+    const name = formData?.get("name")?.trim() || `${station} ${accepts} Bin`;
+    const location = formData?.get("location")?.trim() || "Kuching, Sarawak";
+    const status = formData?.get("status")?.trim() || "Available";
+    const qrCode = formData?.get("qrCode")?.trim() || `CUS-${Date.now().toString().slice(-5)}`;
+    const lat = Number(formData?.get("lat")) || 1.51983;
+    const lng = Number(formData?.get("lng")) || 110.351;
+    const mapX = Math.min(100, Math.max(0, Number(formData?.get("mapX")) || 50));
+    const mapY = Math.min(100, Math.max(0, Number(formData?.get("mapY")) || 50));
+    if (state.bins.some((bin) => bin.qrCode === qrCode)) return { ok: false, message: "QR code already exists." };
+    const id = `BIN-C${Date.now()}`;
     state.bins.push({
       id,
-      name: `New Smart Bin ${state.bins.length + 1}`,
-      location: "Kuching, Sarawak",
-      status: "Available",
-      accepts: ["Paper", "Plastic", "Aluminium", "General Waste"][state.bins.length % 4],
-      lat: 1.51983 + offset,
-      lng: 110.351 + offset,
-      mapX: 50,
-      mapY: 50,
+      station,
+      name,
+      location,
+      status,
+      accepts,
+      qrCode,
+      lat,
+      lng,
+      mapX,
+      mapY,
     });
     saveState();
+    return { ok: true, message: "Bin created." };
   },
 
   updateBinStatus(binId, status) {
     const bin = state.bins.find((item) => item.id === binId);
     if (bin) bin.status = status;
     saveState();
+  },
+
+  updateBin(formData) {
+    const id = formData.get("binId")?.trim();
+    const bin = state.bins.find((item) => item.id === id);
+    if (!bin) return { ok: false, message: "Bin not found." };
+    const qrCode = formData.get("qrCode")?.trim() || bin.qrCode;
+    if (state.bins.some((item) => item.id !== id && item.qrCode === qrCode)) {
+      return { ok: false, message: "QR code already exists." };
+    }
+    bin.station = formData.get("station")?.trim() || bin.station || "Custom Station";
+    bin.name = formData.get("name")?.trim() || bin.name;
+    bin.location = formData.get("location")?.trim() || bin.location;
+    bin.status = formData.get("status")?.trim() || bin.status;
+    bin.accepts = formData.get("accepts")?.trim() || bin.accepts;
+    bin.qrCode = qrCode;
+    bin.lat = Number(formData.get("lat")) || bin.lat;
+    bin.lng = Number(formData.get("lng")) || bin.lng;
+    bin.mapX = Math.min(100, Math.max(0, Number(formData.get("mapX")) || bin.mapX || 50));
+    bin.mapY = Math.min(100, Math.max(0, Number(formData.get("mapY")) || bin.mapY || 50));
+    state.records = state.records.map((record) => record.binId === id ? {
+      ...record,
+      bin: bin.name,
+      location: bin.location,
+      expectedWaste: bin.accepts,
+    } : record);
+    saveState();
+    return { ok: true, message: "Bin updated." };
+  },
+
+  deleteBin(binId) {
+    const id = String(binId);
+    const bin = state.bins.find((item) => item.id === id);
+    if (!bin) return { ok: false, message: "Bin not found." };
+    if (state.bins.length <= 1) return { ok: false, message: "At least one bin must remain." };
+    state.deletedBinIds = [...new Set([...(state.deletedBinIds || []), id])];
+    state.bins = state.bins.filter((item) => item.id !== id);
+    state.records = state.records.map((record) => record.binId === id ? {
+      ...record,
+      bin: `${record.bin} (deleted)`,
+    } : record);
+    if (state.selectedBinId === id) state.selectedBinId = state.bins[0]?.id || null;
+    saveState();
+    return { ok: true, message: "Bin deleted." };
   },
 
   adjustPoints(userId, amount) {
@@ -448,21 +505,27 @@ export const adminService = {
 
 export const feedbackService = {
   submitFeedback(formData) {
-    const issue = formData.get("issue").trim();
+    const issue = formData.get("issue")?.trim() || "";
+    const category = formData.get("category")?.trim() || "General feedback";
+    const source = formData.get("source")?.trim() || "Contact form";
+    const guestName = formData.get("name")?.trim() || "";
+    const guestEmail = formData.get("email")?.trim() || "";
     const user = currentUser();
-    if (!issue) return;
+    if (!issue) return { ok: false, message: "Please write your feedback before sending." };
     state.feedback.unshift({
       id: Date.now(),
       userId: user?.id || null,
-      user: user?.name || "Guest",
-      email: user?.email || "Not logged in",
+      user: user?.name || guestName || "Guest",
+      email: user?.email || guestEmail || "Not logged in",
+      category,
+      source,
       issue,
       status: "Open",
       date: nowLabel(),
     });
     state.form.issue = "";
     saveState();
-    return "Feedback submitted.";
+    return { ok: true, message: "Feedback submitted and saved." };
   },
 };
 

@@ -12,13 +12,20 @@ import QRCode from "qrcode";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
+import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
 import { collectionLocation, initializeDatabase, saveState, state } from "./backend/database.js";
 import { adminService, authService, currentUser, feedbackService, learningService, recyclingService, rewardService, role, selectedBin } from "./backend/services.js";
-import { renderAdminPage } from "./frontend/admin/pages.js";
-import { renderGuestPage } from "./frontend/guest/pages.js";
-import { renderNav } from "./frontend/shared/navigation.js";
-import { binStations, renderNotFound } from "./frontend/shared/templates.js";
-import { renderUserPage } from "./frontend/user/pages.js";
+import { renderAdminPage } from "./features/admin/pages.js";
+import { renderGuestPage } from "./features/guest/pages.js";
+import { renderNav } from "./features/shared/navigation.js";
+import { binStations, renderNotFound } from "./features/shared/templates.js";
+import { renderUserPage } from "./features/user/pages.js";
+import { getScanTarget, normalizeCode } from "./features/qr/scan-routing.js";
 
 const app = document.querySelector("#app");
 const navLinks = document.querySelector("#navLinks");
@@ -35,11 +42,14 @@ let aiCountdownOpen = false;
 let lastGpsPromptKey = "";
 let appReady = false;
 let deferredInstallPrompt = null;
+let installPromptDismissed = false;
+let installPromptWaiter = null;
 let waitingServiceWorker = null;
 let pageMotionCleanups = [];
 let smoothScrollReady = false;
 
 gsap.registerPlugin(ScrollTrigger);
+RectAreaLightUniformsLib.init();
 
 const scanUrlForStation = (stationCode) => {
   const url = new URL(window.location.href);
@@ -49,16 +59,17 @@ const scanUrlForStation = (stationCode) => {
   return url.toString();
 };
 
+const scanUrlForBinCode = (binCode) => {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("bin", binCode);
+  return url.toString();
+};
+
 const stationBinsForSelectedLocation = () => {
   const activeBin = selectedBin();
   return state.bins.filter((bin) => bin.station === activeBin.station);
-};
-
-const normalizeCode = (value) => {
-  const clean = String(value || "").trim().toUpperCase();
-  const compactMatch = clean.match(/^BIN(\d{3})$/);
-  if (compactMatch) return `BIN-${compactMatch[1]}`;
-  return clean;
 };
 
 const binIdFromScanValue = (value) => {
@@ -134,17 +145,10 @@ const handleStationFromQr = (scanValue, { updateUrl = false } = {}) => {
 };
 
 const handleQrScan = (scanValue, options = {}) => {
-  const text = String(scanValue || "");
-  try {
-    const url = new URL(text, window.location.origin);
-    if (url.searchParams.has("station")) return handleStationFromQr(text, options);
-  } catch {
-    // Fall through to plain-code handling.
-  }
-
-  const stationCode = stationCodeFromScanValue(text);
-  if (stationBinForCode(stationCode)) return handleStationFromQr(text, options);
-  return handleBinFromQr(text, options);
+  const target = getScanTarget(scanValue, state.bins, window.location.origin);
+  return target.type === "station"
+    ? handleStationFromQr(target.code, options)
+    : handleBinFromQr(target.code, options);
 };
 
 const distanceMeters = (from, to) => {
@@ -369,7 +373,7 @@ const handleBinFromQr = (scanValue, { updateUrl = false } = {}) => {
 
 const showToast = (message) => {
   if (!message) return;
-  const errorWords = ["failed", "try again", "wrong", "unknown", "not enough", "no points", "could not", "false", "missing"];
+  const errorWords = ["unable", "failed", "try again", "wrong", "unknown", "not enough", "no points", "could not", "false", "missing"];
   const isError = errorWords.some((word) => message.toLowerCase().includes(word));
   Swal.fire({
     text: message,
@@ -495,6 +499,11 @@ const handleNavigation = async (target) => {
     showInstallPrompt();
   }
 
+  if (target.dataset.action === "close-install-prompt") {
+    installPromptDismissed = true;
+    renderInstallPrompt();
+  }
+
   if (target.dataset.action === "back-to-top") {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -514,22 +523,6 @@ const handleNavigation = async (target) => {
     if (!confirmed.isConfirmed) return;
     const result = authService.deleteCurrentAccount();
     if (result?.message) showToast(result.message);
-    render();
-  }
-};
-
-const handleDemoFill = (target) => {
-  if (target.dataset.demo === "user") {
-    state.form.email = "user@demo.com";
-    state.form.password = "123456";
-    saveState();
-    render();
-  }
-
-  if (target.dataset.demo === "admin") {
-    state.form.email = "admin@demo.com";
-    state.form.password = "admin123";
-    saveState();
     render();
   }
 };
@@ -617,7 +610,8 @@ const handleUserActions = (target) => {
 
 const handleAdminActions = (target) => {
   if (target.dataset.action === "add-bin") {
-    adminService.addBin();
+    const result = adminService.addBin();
+    if (result?.message) showToast(result.message);
     render();
   }
 
@@ -638,6 +632,14 @@ const handleAdminActions = (target) => {
     const confirmed = window.confirm("Delete this user and all related records?");
     if (!confirmed) return;
     const result = adminService.deleteUser(target.dataset.deleteUser);
+    if (result?.message) showToast(result.message);
+    render();
+  }
+
+  if (target.dataset.deleteBin) {
+    const confirmed = window.confirm("Delete this bin? Existing records will remain, but the bin will no longer be available.");
+    if (!confirmed) return;
+    const result = adminService.deleteBin(target.dataset.deleteBin);
     if (result?.message) showToast(result.message);
     render();
   }
@@ -688,7 +690,6 @@ const handleClick = (event) => {
   if (!target) return;
 
   handleNavigation(target);
-  handleDemoFill(target);
   handleUserActions(target);
   handleAdminActions(target);
 };
@@ -747,13 +748,16 @@ const handleSubmit = (event) => {
 
   if (form.dataset.form === "login") result = authService.login(formData);
   if (form.dataset.form === "register") result = authService.register(formData);
-  if (form.dataset.form === "feedback") result = { ok: true, message: feedbackService.submitFeedback(formData) };
+  if (form.dataset.form === "feedback") result = feedbackService.submitFeedback(formData);
+  if (form.dataset.form === "add-bin") result = adminService.addBin(formData);
+  if (form.dataset.form === "edit-bin") result = adminService.updateBin(formData);
   if (form.dataset.form === "add-reward") result = adminService.addReward(formData);
   if (form.dataset.form === "add-user") result = adminService.addUser(formData);
   if (form.dataset.form === "edit-managed-user") result = adminService.editUserByAdmin(formData);
   if (form.dataset.form === "profile") result = authService.updateProfile(formData);
 
   if (result?.message) showToast(result.message);
+  if (result?.ok === false) return;
   render();
   if (result?.ok && state.page === "select-waste") window.setTimeout(autoVerifyCurrentLocationAfterScan, 250);
 };
@@ -812,10 +816,28 @@ const localYoloFallback = (file) => {
 
   return {
     ...result,
-    confidence: 45,
+    confidence: 70,
+    rawConfidence: 70,
+    topPredictions: [],
     box: { x: 128, y: 84, width: 260, height: 260 },
-    model: "YOLO detector fallback",
-    presenceDetected: false,
+    model: "Browser heuristic fallback",
+    presenceDetected: true,
+    detectorAvailable: true,
+  };
+};
+
+const AI_MIN_DECISION_CONFIDENCE = 70;
+const AI_TRAINING_CONFIDENCE = 70;
+
+const normalizeAiDetection = (result) => {
+  const confidence = Math.max(0, Math.min(100, Math.round(Number(result?.confidence) || 0)));
+  const rawConfidence = Math.max(0, Math.min(100, Math.round(Number(result?.rawConfidence ?? result?.confidence) || 0)));
+  return {
+    ...result,
+    confidence,
+    rawConfidence,
+    detectorAvailable: result?.detectorAvailable !== false && result?.presenceDetected !== false,
+    topPredictions: Array.isArray(result?.topPredictions) ? result.topPredictions : [],
   };
 };
 
@@ -831,7 +853,7 @@ const detectWasteWithAi = async (file) => {
       if (!response.ok) throw new Error("Local AI detector unavailable");
       const result = await response.json();
       if (!result?.category || !result?.label) throw new Error("Invalid local AI detector result");
-      return result;
+      return normalizeAiDetection(result);
     } catch {
       // Continue to Vercel API fallback.
     }
@@ -842,9 +864,9 @@ const detectWasteWithAi = async (file) => {
     if (!response.ok) throw new Error("Hosted AI detector unavailable");
     const result = await response.json();
     if (!result?.category || !result?.label) throw new Error("Invalid hosted AI detector result");
-    return result;
+    return normalizeAiDetection(result);
   } catch {
-    return localYoloFallback(file);
+    return normalizeAiDetection(localYoloFallback(file));
   }
 };
 
@@ -877,7 +899,7 @@ const collectAiTrainingSample = async ({ blob, zoneCategory, detection, correct 
   formData.append("confidence", String(detection.confidence || 0));
   formData.append("station", selectedBin().station || "");
   formData.append("zone", zoneCategory);
-  formData.append("use_for_training", String(correct && detection.confidence >= 80));
+  formData.append("use_for_training", String(correct && detection.confidence >= AI_TRAINING_CONFIDENCE));
 
   try {
     await fetch("http://127.0.0.1:8000/collect-sample", { method: "POST", body: formData });
@@ -923,10 +945,21 @@ const runLiveAiDetection = async () => {
       : null;
     if (matchedStationBin) state.selectedBinId = matchedStationBin.id;
     saveState();
-    if (detection.confidence < 70) {
+    if (!detection.detectorAvailable) {
+      await Swal.fire({
+        title: "AI Detector Unavailable",
+        text: "Start the local AI API or configure the hosted AI key, then scan again. The fallback result is not reliable enough to record.",
+        icon: "warning",
+        confirmButtonColor: "#0b0b0d",
+      });
+      render();
+      return;
+    }
+
+    if (detection.confidence < AI_MIN_DECISION_CONFIDENCE) {
       await Swal.fire({
         title: "Low Confidence",
-        text: "Move the rubbish closer to the camera or improve lighting, then scan again.",
+        text: `Detection confidence is ${detection.confidence}%. Move the rubbish closer to the camera or improve lighting, then scan again.`,
         icon: "warning",
         confirmButtonColor: "#0b0b0d",
       });
@@ -959,6 +992,7 @@ const runLiveAiDetection = async () => {
             <p><strong>Detected object:</strong> ${detection.label}</p>
             <p><strong>Detected category:</strong> ${detection.category}</p>
             <p><strong>Confidence:</strong> ${detection.confidence}%</p>
+            ${detection.rawConfidence !== detection.confidence ? `<p><strong>Raw model score:</strong> ${detection.rawConfidence}%</p>` : ""}
             <p><strong>Placed zone:</strong> ${zoneCategory}</p>
             <p><strong>Zone bin:</strong> ${matchedStationBin.name}</p>
             <p><strong>Expected for zone:</strong> ${zoneCategory}</p>
@@ -1157,9 +1191,16 @@ const handleChange = async (event) => {
     saveState();
   }
 
-  if (event.target.dataset.binStatus) {
-    adminService.updateBinStatus(event.target.dataset.binStatus, event.target.value);
-    render();
+  const adminBinForm = event.target.closest?.('[data-form="add-bin"], [data-form="edit-bin"]');
+  if (adminBinForm && ["station", "accepts"].includes(event.target.name)) {
+    updateAdminBinForm(adminBinForm, { fillStation: event.target.name === "station" });
+    return;
+  }
+
+  if (adminBinForm && event.target.name === "qrCode") {
+    const canvas = adminBinForm.querySelector("[data-bin-qr-preview]");
+    if (canvas) canvas.dataset.readyValue = "";
+    initQrGenerator();
   }
 };
 
@@ -1289,6 +1330,82 @@ const initQrGenerator = () => {
     QRCode.toCanvas(canvas, scanUrl, { width: 180, margin: 1 });
     const urlLabel = document.querySelector(`[data-qr-url-for-station="${canvas.dataset.qrStation}"]`);
     if (urlLabel) urlLabel.textContent = scanUrl;
+  });
+
+  document.querySelectorAll("[data-bin-qr-preview]").forEach((canvas) => {
+    const form = canvas.closest("form");
+    const qrCode = form?.elements.qrCode?.value?.trim();
+    if (!form || !qrCode) return;
+    const scanUrl = scanUrlForBinCode(qrCode);
+    if (canvas.dataset.readyValue === scanUrl) return;
+    canvas.dataset.readyValue = scanUrl;
+    QRCode.toCanvas(canvas, scanUrl, { width: 132, margin: 1 });
+    const urlLabel = form.querySelector("[data-bin-qr-url]");
+    if (urlLabel) urlLabel.textContent = scanUrl;
+  });
+};
+
+const binCategorySuffix = (category) => ({
+  Paper: "PAP",
+  Plastic: "PLA",
+  Aluminium: "ALU",
+  "General Waste": "GEN",
+}[category] || "BIN");
+
+const stationCodeForName = (stationName) => {
+  const existingStation = binStations().find((station) => station.name.toLowerCase() === String(stationName || "").trim().toLowerCase());
+  if (existingStation?.code) return existingStation.code;
+  const words = String(stationName || "Custom")
+    .replace(/[^A-Za-z0-9 ]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const code = words.length > 1
+    ? words.map((word) => word[0]).join("")
+    : (words[0] || "CUS").slice(0, 3);
+  return code.toUpperCase().padEnd(3, "X").slice(0, 3);
+};
+
+const stationPresetForName = (stationName) => {
+  const station = binStations().find((item) => item.name.toLowerCase() === String(stationName || "").trim().toLowerCase());
+  if (!station) return null;
+  const firstBin = station.bins[0] || {};
+  return {
+    location: station.location || firstBin.location || "",
+    lat: station.lat || firstBin.lat || "",
+    lng: station.lng || firstBin.lng || "",
+    mapX: firstBin.mapX || 50,
+    mapY: firstBin.mapY || 50,
+  };
+};
+
+const updateAdminBinForm = (form, { fillStation = false, autoCode = true } = {}) => {
+  if (!form?.matches('[data-form="add-bin"], [data-form="edit-bin"]')) return;
+  const station = form.elements.station?.value?.trim() || "";
+  const category = form.elements.accepts?.value || "Plastic";
+  const preset = stationPresetForName(station);
+  const qrCode = `${stationCodeForName(station)}-${binCategorySuffix(category)}`;
+
+  if (fillStation && preset) {
+    if (form.elements.location) form.elements.location.value = preset.location;
+    if (form.elements.lat) form.elements.lat.value = Number(preset.lat).toFixed(6);
+    if (form.elements.lng) form.elements.lng.value = Number(preset.lng).toFixed(6);
+    if (form.elements.mapX) form.elements.mapX.value = Math.round(Number(preset.mapX) || 50);
+    if (form.elements.mapY) form.elements.mapY.value = Math.round(Number(preset.mapY) || 50);
+  }
+
+  if (autoCode && form.elements.qrCode) form.elements.qrCode.value = qrCode;
+  if (autoCode && form.elements.name && station) form.elements.name.value = `${station} ${category} Bin`;
+  const canvas = form.querySelector("[data-bin-qr-preview]");
+  if (canvas) {
+    canvas.dataset.readyValue = "";
+    initQrGenerator();
+  }
+};
+
+const initAdminBinForms = () => {
+  document.querySelectorAll('[data-form="add-bin"], [data-form="edit-bin"]').forEach((form) => {
+    updateAdminBinForm(form, { fillStation: false, autoCode: form.dataset.form === "add-bin" && Boolean(form.elements.station?.value) });
   });
 };
 
@@ -1602,16 +1719,6 @@ const initHomeAnimations = () => {
   if (heroVideo) {
     const keepHeroVideoPlaying = () => {
       if (heroVideo.tagName === "IFRAME") {
-        heroVideo.contentWindow?.postMessage(JSON.stringify({
-          event: "command",
-          func: "mute",
-          args: [],
-        }), "https://www.youtube.com");
-        heroVideo.contentWindow?.postMessage(JSON.stringify({
-          event: "command",
-          func: "playVideo",
-          args: [],
-        }), "https://www.youtube.com");
         return;
       }
 
@@ -1913,6 +2020,7 @@ const initPagePlugins = () => {
   initLeafletMap();
   initCollectionMap();
   initQrGenerator();
+  initAdminBinForms();
   initReportChart();
   initThreeGame();
   initScanVerificationPrompt();
@@ -1932,24 +2040,75 @@ const initPagePlugins = () => {
   ScrollTrigger.refresh();
 };
 
-const makeTextSprite = (text, color = "#10251d") => {
+const makeTextSprite = (text, color = "#10251d", options = {}) => {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 128;
   const context = canvas.getContext("2d");
-  context.fillStyle = "rgba(255, 255, 255, 0.92)";
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  const background = options.background || "rgba(255, 255, 255, 0.96)";
+  const radius = 28;
+  context.fillStyle = background;
+  context.beginPath();
+  context.roundRect(10, 14, canvas.width - 20, canvas.height - 28, radius);
+  context.fill();
+  context.strokeStyle = options.border || "rgba(16, 37, 29, 0.16)";
+  context.lineWidth = 5;
+  context.stroke();
   context.fillStyle = color;
-  context.font = "bold 42px Arial";
+  context.font = `bold ${options.fontSize || 42}px Arial`;
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillText(text, canvas.width / 2, canvas.height / 2);
 
   const texture = new THREE.CanvasTexture(canvas);
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(2.5, 0.62, 1);
+  sprite.scale.set(options.width || 2.5, options.height || 0.62, 1);
+  sprite.renderOrder = 20;
   return sprite;
+};
+
+const makeTextTexture = (text, color = "#10251d", options = {}) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 192;
+  const context = canvas.getContext("2d");
+  const background = options.background || "rgba(255, 255, 255, 0.98)";
+  const radius = 28;
+  context.fillStyle = background;
+  context.beginPath();
+  context.roundRect(14, 18, canvas.width - 28, canvas.height - 36, radius);
+  context.fill();
+  context.strokeStyle = options.border || "rgba(16, 37, 29, 0.2)";
+  context.lineWidth = 6;
+  context.stroke();
+  context.fillStyle = color;
+  context.font = `bold ${options.fontSize || 52}px Arial`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(text, canvas.width / 2, canvas.height / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+};
+
+const makeDetailPlane = (width, height, color, options = {}) => {
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: options.opacity ?? 1,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
+  mesh.name = options.name || "detail";
+  return mesh;
 };
 
 const createBin = ({ type, color, x }) => {
@@ -1958,20 +2117,36 @@ const createBin = ({ type, color, x }) => {
 
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(1.55, 1.8, 1.25),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.55 })
+    new THREE.MeshPhysicalMaterial({
+      color,
+      metalness: 0.32,
+      roughness: 0.36,
+      clearcoat: 0.18,
+      clearcoatRoughness: 0.26,
+    })
   );
   body.position.y = 0.9;
   group.add(body);
 
   const opening = new THREE.Mesh(
     new THREE.BoxGeometry(1.35, 0.12, 1.05),
-    new THREE.MeshStandardMaterial({ color: 0x10251d, roughness: 0.4 })
+    new THREE.MeshPhysicalMaterial({ color: 0x10251d, metalness: 0.25, roughness: 0.3 })
   );
   opening.position.y = 1.86;
   group.add(opening);
 
-  const label = makeTextSprite(type, "#10251d");
-  label.position.set(0, 2.55, 0);
+  const label = new THREE.Mesh(
+    new THREE.PlaneGeometry(type === "General Waste" ? 1.34 : 1.08, 0.42),
+    new THREE.MeshBasicMaterial({
+      map: makeTextTexture(type, "#10251d", { fontSize: type === "General Waste" ? 42 : 50 }),
+      transparent: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    })
+  );
+  label.name = `${type} label`;
+  label.position.set(0, 1.16, 0.631);
   group.add(label);
 
   group.position.set(x, 0, -0.4);
@@ -1985,42 +2160,186 @@ const createRubbish = (item) => {
     "Aluminium": 0xd8a21d,
     "General Waste": 0x2b2f32,
   };
-  const material = new THREE.MeshStandardMaterial({ color: colors[item.bin] || 0x8fd6d2, roughness: 0.48 });
+  const material = new THREE.MeshPhysicalMaterial({
+    color: colors[item.bin] || 0x8fd6d2,
+    metalness: item.shape === "can" ? 0.58 : 0.08,
+    roughness: item.shape === "can" ? 0.22 : 0.5,
+    clearcoat: item.shape === "bottle" ? 0.72 : 0.2,
+    clearcoatRoughness: 0.18,
+  });
   const group = new THREE.Group();
   group.userData = { item };
 
   if (item.shape === "bottle") {
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.29, 0.82, 28), material);
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.22, 20), material);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.09, 20), new THREE.MeshStandardMaterial({ color: 0x24552f }));
-    neck.position.y = 0.52;
-    cap.position.y = 0.69;
-    group.add(body, neck, cap);
+    const plastic = new THREE.MeshPhysicalMaterial({
+      color: 0x98e8d8,
+      transparent: true,
+      opacity: 0.54,
+      transmission: 0.28,
+      metalness: 0.02,
+      roughness: 0.13,
+      clearcoat: 0.86,
+      clearcoatRoughness: 0.08,
+    });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.32, 0.9, 36), plastic);
+    const shoulder = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.26, 0.18, 36), plastic);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.26, 28), plastic);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.145, 0.1, 28), new THREE.MeshPhysicalMaterial({ color: 0x0f7d54, metalness: 0.06, roughness: 0.36 }));
+    const labelBand = new THREE.Mesh(new THREE.CylinderGeometry(0.268, 0.328, 0.19, 36, 1, true), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.72, side: THREE.DoubleSide }));
+    const ribs = [-0.25, -0.08, 0.12].map((y) => {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.011, 8, 42), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.34 }));
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = y;
+      return ring;
+    });
+    shoulder.position.y = 0.54;
+    neck.position.y = 0.76;
+    cap.position.y = 0.96;
+    labelBand.position.y = 0.08;
+    group.add(body, shoulder, neck, cap, labelBand, ...ribs);
   } else if (item.shape === "cup") {
     const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.24, 0.58, 28), material);
     cup.rotation.z = 0.15;
     group.add(cup);
   } else if (item.shape === "paper") {
-    const sheet = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.06, 0.72), material);
-    const fold = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.07, 0.18), new THREE.MeshStandardMaterial({ color: 0xf7edc6 }));
-    fold.position.set(0.18, 0.07, 0.18);
-    group.add(sheet, fold);
+    if (item.name.toLowerCase().includes("tissue")) {
+      const tissueMaterial = new THREE.MeshPhysicalMaterial({ color: 0xf7f3e8, metalness: 0, roughness: 0.82 });
+      const softFoldMaterial = new THREE.MeshBasicMaterial({
+        color: 0xfffbef,
+        transparent: true,
+        opacity: 0.92,
+        side: THREE.DoubleSide,
+      });
+      const core = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.54, 8, 18), tissueMaterial);
+      core.scale.set(1.4, 0.56, 0.78);
+      core.rotation.set(0.15, 0, Math.PI / 2);
+      group.add(core);
+
+      [
+        { size: [0.92, 0.42], pos: [0, 0.06, 0.02], rot: [-1.18, 0.16, -0.18] },
+        { size: [0.68, 0.34], pos: [-0.25, 0.08, -0.05], rot: [-1.05, -0.34, 0.42] },
+        { size: [0.58, 0.3], pos: [0.28, 0.07, 0.08], rot: [-1.28, 0.38, -0.46] },
+        { size: [0.46, 0.24], pos: [0.02, 0.15, -0.18], rot: [-0.92, 0.74, 0.08] },
+      ].forEach((fold) => {
+        const sheet = new THREE.Mesh(new THREE.PlaneGeometry(fold.size[0], fold.size[1], 5, 3), softFoldMaterial.clone());
+        sheet.position.set(...fold.pos);
+        sheet.rotation.set(...fold.rot);
+        group.add(sheet);
+      });
+
+      const twistA = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.38, 16), tissueMaterial);
+      const twistB = twistA.clone();
+      twistA.position.set(-0.48, 0.02, 0);
+      twistB.position.set(0.48, 0.02, 0);
+      twistA.rotation.set(0, 0, Math.PI / 2);
+      twistB.rotation.set(0, 0, -Math.PI / 2);
+      group.add(twistA, twistB);
+    } else {
+      const paperMaterial = new THREE.MeshPhysicalMaterial({ color: 0xf5efd7, metalness: 0, roughness: 0.72 });
+      const sheet = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.045, 0.76), paperMaterial);
+      const fold = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.052, 0.2), new THREE.MeshPhysicalMaterial({ color: 0xe6dfc6, metalness: 0, roughness: 0.78 }));
+      fold.position.set(0.22, 0.045, 0.2);
+      group.add(sheet, fold);
+      [-0.24, -0.08, 0.08, 0.24].forEach((z, index) => {
+        const line = makeDetailPlane(index === 0 ? 0.34 : 0.72, 0.018, 0x39443b, { opacity: 0.42 });
+        line.rotation.x = -Math.PI / 2;
+        line.position.set(index === 0 ? -0.26 : 0, 0.034, z);
+        group.add(line);
+      });
+      const photoBlock = makeDetailPlane(0.28, 0.22, 0x8fb7c6, { opacity: 0.7 });
+      photoBlock.rotation.x = -Math.PI / 2;
+      photoBlock.position.set(0.29, 0.036, -0.18);
+      group.add(photoBlock);
+    }
   } else if (item.shape === "box") {
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.52, 0.62), material);
-    const flap = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.05, 0.28), new THREE.MeshStandardMaterial({ color: 0xc49a45 }));
-    flap.position.set(0, 0.31, -0.2);
-    group.add(box, flap);
+    const cardboard = new THREE.MeshPhysicalMaterial({ color: 0xb88745, metalness: 0.02, roughness: 0.82 });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.54, 0.66), cardboard);
+    const flapMaterial = new THREE.MeshPhysicalMaterial({ color: 0xd1a35d, metalness: 0, roughness: 0.8 });
+    const flapFront = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.035, 0.28), flapMaterial);
+    const flapBack = flapFront.clone();
+    const tape = makeDetailPlane(0.15, 0.7, 0xe9d58e, { opacity: 0.78 });
+    flapFront.position.set(0, 0.3, 0.22);
+    flapBack.position.set(0, 0.3, -0.22);
+    flapFront.rotation.x = -0.35;
+    flapBack.rotation.x = 0.35;
+    tape.rotation.x = -Math.PI / 2;
+    tape.position.set(0, 0.293, 0);
+    group.add(box, flapFront, flapBack, tape);
   } else if (item.shape === "can") {
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.72, 32), material);
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.255, 0.255, 0.035, 32), new THREE.MeshStandardMaterial({ color: 0xd9e4df, metalness: 0.55, roughness: 0.28 }));
+    const canMaterial = new THREE.MeshPhysicalMaterial({ color: 0xd8a21d, metalness: 0.84, roughness: 0.18, clearcoat: 0.42, clearcoatRoughness: 0.12 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.78, 48), canMaterial);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.274, 0.274, 0.035, 48), new THREE.MeshPhysicalMaterial({ color: 0xe8ece8, metalness: 0.86, roughness: 0.15 }));
     const bottom = top.clone();
-    top.position.y = 0.38;
-    bottom.position.y = -0.38;
-    group.add(body, top, bottom);
+    const topRim = new THREE.Mesh(new THREE.TorusGeometry(0.245, 0.014, 8, 48), top.material);
+    const bottomRim = topRim.clone();
+    const pullTab = makeDetailPlane(0.22, 0.08, 0xbfc8c2, { opacity: 0.95 });
+    const labelStripe = new THREE.Mesh(new THREE.CylinderGeometry(0.272, 0.272, 0.22, 48, 1, true), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, side: THREE.DoubleSide }));
+    top.position.y = 0.407;
+    bottom.position.y = -0.407;
+    topRim.rotation.x = Math.PI / 2;
+    bottomRim.rotation.x = Math.PI / 2;
+    topRim.position.y = 0.43;
+    bottomRim.position.y = -0.43;
+    pullTab.rotation.x = -Math.PI / 2;
+    pullTab.position.set(0.03, 0.429, 0);
+    labelStripe.position.y = -0.02;
+    group.add(body, top, bottom, topRim, bottomRim, pullTab, labelStripe);
   } else if (item.shape === "wrapper") {
-    const wrapper = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.12, 0.44), material);
-    wrapper.rotation.set(0.2, 0.4, -0.15);
-    group.add(wrapper);
+    const wrapperMaterial = new THREE.MeshPhysicalMaterial({ color: 0xe84f3f, metalness: 0.18, roughness: 0.42, clearcoat: 0.5, clearcoatRoughness: 0.2 });
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.58, -0.22);
+    shape.lineTo(-0.44, -0.27);
+    shape.lineTo(-0.16, -0.23);
+    shape.lineTo(0.12, -0.27);
+    shape.lineTo(0.56, -0.2);
+    shape.lineTo(0.48, 0.22);
+    shape.lineTo(0.18, 0.26);
+    shape.lineTo(-0.08, 0.22);
+    shape.lineTo(-0.36, 0.27);
+    shape.lineTo(-0.58, 0.18);
+    shape.lineTo(-0.64, -0.02);
+    shape.lineTo(-0.58, -0.22);
+    const wrapper = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(shape, { depth: 0.045, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.025, bevelSegments: 2 }),
+      wrapperMaterial
+    );
+    wrapper.rotation.x = -Math.PI / 2;
+
+    const leftCrimp = new THREE.Mesh(
+      new THREE.ConeGeometry(0.18, 0.36, 4),
+      new THREE.MeshPhysicalMaterial({ color: 0xffc72c, metalness: 0.12, roughness: 0.48, clearcoat: 0.35 })
+    );
+    const rightCrimp = leftCrimp.clone();
+    leftCrimp.scale.set(1, 0.42, 0.8);
+    rightCrimp.scale.set(1, 0.42, 0.8);
+    leftCrimp.position.set(-0.58, 0.02, -0.02);
+    rightCrimp.position.set(0.58, 0.02, 0.02);
+    leftCrimp.rotation.set(0, 0, -Math.PI / 2);
+    rightCrimp.rotation.set(0, 0, Math.PI / 2);
+
+    const topRidge = makeDetailPlane(0.82, 0.045, 0xff685f, { opacity: 0.92 });
+    const centerShine = makeDetailPlane(0.42, 0.04, 0xffffff, { opacity: 0.42 });
+    const logoPatch = makeDetailPlane(0.25, 0.18, 0xffd34d, { opacity: 0.95 });
+    const creaseA = makeDetailPlane(0.38, 0.022, 0xb5161b, { opacity: 0.36 });
+    const creaseB = makeDetailPlane(0.3, 0.018, 0xffffff, { opacity: 0.3 });
+    [topRidge, centerShine, logoPatch, creaseA, creaseB].forEach((detail) => {
+      detail.rotation.x = -Math.PI / 2;
+      detail.position.y = 0.052;
+    });
+    topRidge.position.set(-0.02, 0.052, -0.18);
+    centerShine.position.set(-0.08, 0.054, 0.02);
+    centerShine.rotation.z = -0.08;
+    logoPatch.position.set(0.3, 0.056, 0.02);
+    logoPatch.rotation.z = 0.28;
+    creaseA.position.set(-0.16, 0.055, 0.14);
+    creaseA.rotation.z = 0.22;
+    creaseB.position.set(0.12, 0.057, -0.1);
+    creaseB.rotation.z = -0.18;
+
+    const wrapperGroup = new THREE.Group();
+    wrapperGroup.add(wrapper, leftCrimp, rightCrimp, topRidge, centerShine, logoPatch, creaseA, creaseB);
+    wrapperGroup.rotation.set(0.14, 0.36, -0.12);
+    group.add(wrapperGroup);
   } else if (item.shape === "food") {
     const peel = new THREE.Mesh(new THREE.TorusKnotGeometry(0.24, 0.07, 80, 10), material);
     peel.rotation.set(0.4, 0.2, 0.7);
@@ -2031,13 +2350,24 @@ const createRubbish = (item) => {
     group.add(crumple);
   }
 
-  group.traverse((child) => {
-    if (child.isMesh) child.castShadow = true;
-  });
-  group.position.set(0, 1.25, 2.15);
+  const hitArea = new THREE.Mesh(
+    new THREE.SphereGeometry(1.08, 24, 16),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
+  );
+  hitArea.name = "drag-hit-area";
+  hitArea.userData.isHitArea = true;
+  group.add(hitArea);
 
-  const label = makeTextSprite(item.name, "#10251d");
-  label.position.set(0, 0.9, 0);
+  group.traverse((child) => {
+    if (!child.isMesh) return;
+    child.castShadow = !child.userData.isHitArea;
+    child.receiveShadow = !child.userData.isHitArea;
+  });
+  group.scale.setScalar(1.55);
+  group.position.set(0, 1.7, 1.35);
+
+  const label = makeTextSprite(item.name, "#10251d", { width: 2.35, height: 0.54, fontSize: 36 });
+  label.position.set(0, 0.92, 0);
   group.add(label);
 
   return group;
@@ -2046,51 +2376,134 @@ const createRubbish = (item) => {
 const initThreeGame = () => {
   const mount = document.querySelector("#threeGame");
   if (!mount || mount.dataset.ready) return;
+  if (mount.clientWidth < 20 || mount.clientHeight < 20) {
+    window.requestAnimationFrame(initThreeGame);
+    return;
+  }
   mount.dataset.ready = "true";
 
   const items = JSON.parse(mount.dataset.items);
+  const itemBadge = document.querySelector("#gameItemBadge");
   let activeItem = null;
+  let lastItemId = null;
   let dragging = false;
   let animationId = null;
+  let useComposer = true;
+  const gameWidth = () => Math.max(320, mount.clientWidth || mount.getBoundingClientRect().width || 640);
+  const gameHeight = () => Math.max(320, mount.clientHeight || mount.getBoundingClientRect().height || 480);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf8fcf4);
+  scene.background = new THREE.Color(0xf1f8ec);
 
-  const camera = new THREE.PerspectiveCamera(42, mount.clientWidth / mount.clientHeight, 0.1, 100);
-  camera.position.set(0, 4.6, 7.4);
-  camera.lookAt(0, 0.9, 0);
+  const camera = new THREE.PerspectiveCamera(48, gameWidth() / gameHeight(), 0.1, 100);
+  camera.position.set(0, 4.2, 7.2);
+  camera.lookAt(0, 1.25, 0.25);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(mount.clientWidth, mount.clientHeight);
+  renderer.setSize(gameWidth(), gameHeight(), false);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.86;
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.domElement.style.cursor = "grab";
+  renderer.domElement.style.touchAction = "none";
   mount.appendChild(renderer.domElement);
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xc7dfbd, 1.8));
-  const light = new THREE.DirectionalLight(0xffffff, 1.8);
-  light.position.set(2.8, 6, 4);
-  light.castShadow = true;
-  scene.add(light);
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  pmremGenerator.compileEquirectangularShader();
+  const environmentFallback = new THREE.Scene();
+  environmentFallback.background = new THREE.Color(0xf1f8ec);
+  scene.environment = pmremGenerator.fromScene(environmentFallback, 0.04).texture;
+  fetch("/images/studio-small.hdr", { method: "HEAD" })
+    .then((response) => {
+      if (!response.ok || !mount.isConnected) return;
+      new RGBELoader().load("/images/studio-small.hdr", (texture) => {
+        if (!mount.isConnected) {
+          texture.dispose();
+          return;
+        }
+        const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+        scene.environment = envMap;
+        texture.dispose();
+      });
+    })
+    .catch(() => {});
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xb7d8aa, 0.92));
+
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.9);
+  directionalLight.position.set(-3.8, 6.2, 4.4);
+  directionalLight.castShadow = true;
+  directionalLight.shadow.mapSize.set(2048, 2048);
+  directionalLight.shadow.camera.near = 0.5;
+  directionalLight.shadow.camera.far = 18;
+  directionalLight.shadow.camera.left = -7;
+  directionalLight.shadow.camera.right = 7;
+  directionalLight.shadow.camera.top = 7;
+  directionalLight.shadow.camera.bottom = -7;
+  scene.add(directionalLight);
+
+  const rectLight = new THREE.RectAreaLight(0xfff5cf, 0.72, 5.6, 2.4);
+  rectLight.position.set(0, 4.8, 3.2);
+  rectLight.lookAt(0, 0.7, 0);
+  scene.add(rectLight);
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(9, 6),
-    new THREE.MeshStandardMaterial({ color: 0xdff4d5, roughness: 0.8 })
+    new THREE.MeshPhysicalMaterial({ color: 0xdff4d5, metalness: 0.08, roughness: 0.26 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
 
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(gameWidth(), gameHeight()), 0.035, 0.28, 0.92);
+  composer.addPass(bloomPass);
+  const smaaPass = new SMAAPass(gameWidth() * renderer.getPixelRatio(), gameHeight() * renderer.getPixelRatio());
+  composer.addPass(smaaPass);
+
+  const binConfigs = [
+    { type: "Paper", color: 0x1f5d99 },
+    { type: "Plastic", color: 0x1f7a45 },
+    { type: "Aluminium", color: 0xd8a21d },
+    { type: "General Waste", color: 0x2b2f32 },
+  ];
   const bins = [
-    createBin({ type: "Paper", color: 0x1f5d99, x: -3.6 }),
-    createBin({ type: "Plastic", color: 0x1f7a45, x: -1.2 }),
-    createBin({ type: "Aluminium", color: 0xd8a21d, x: 1.2 }),
-    createBin({ type: "General Waste", color: 0x2b2f32, x: 3.6 }),
+    createBin({ ...binConfigs[0], x: -3.6 }),
+    createBin({ ...binConfigs[1], x: -1.2 }),
+    createBin({ ...binConfigs[2], x: 1.2 }),
+    createBin({ ...binConfigs[3], x: 3.6 }),
   ];
   bins.forEach((bin) => scene.add(bin));
 
+  const updateGameLayout = () => {
+    const width = gameWidth();
+    const height = gameHeight();
+    const aspect = width / Math.max(height, 1);
+    const compact = width < 560;
+    const tablet = width >= 560 && width < 900;
+    const spacing = compact ? 1.38 : tablet ? 1.92 : 2.42;
+    const scale = compact ? 0.72 : tablet ? 0.9 : 1.12;
+    const positions = [-1.5, -0.5, 0.5, 1.5].map((value) => value * spacing);
+
+    bins.forEach((bin, index) => {
+      bin.position.x = positions[index];
+      bin.scale.setScalar(scale);
+    });
+
+    camera.fov = compact ? 60 : tablet ? 54 : 48;
+    camera.position.set(0, compact ? 4.9 : 4.2, compact || aspect < 1 ? 8.4 : 7.2);
+    camera.lookAt(0, compact ? 1.4 : 1.25, 0.25);
+    camera.aspect = aspect;
+    camera.updateProjectionMatrix();
+  };
+
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
-  const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1.25);
+  const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1.7);
   const hitPoint = new THREE.Vector3();
 
   const setPointer = (event) => {
@@ -2101,7 +2514,13 @@ const initThreeGame = () => {
 
   const spawnItem = () => {
     if (activeItem) scene.remove(activeItem);
-    activeItem = createRubbish(items[Math.floor(Math.random() * items.length)]);
+    const availableItems = items.length > 1
+      ? items.filter((candidate) => candidate.id !== lastItemId)
+      : items;
+    const item = availableItems[Math.floor(Math.random() * availableItems.length)];
+    lastItemId = item.id;
+    if (itemBadge) itemBadge.textContent = `Drag: ${item.name}`;
+    activeItem = createRubbish(item);
     scene.add(activeItem);
   };
 
@@ -2113,7 +2532,7 @@ const initThreeGame = () => {
 
     if (closest.distance > 1.85) {
       showToast("Drop the item closer to a bin.");
-      activeItem.position.set(0, 1.25, 2.15);
+      activeItem.position.set(0, 1.7, 1.35);
       return;
     }
 
@@ -2123,12 +2542,15 @@ const initThreeGame = () => {
   };
 
   const onPointerDown = (event) => {
+    if (!activeItem) return;
     setPointer(event);
     raycaster.setFromCamera(pointer, camera);
     const hits = raycaster.intersectObject(activeItem, true);
     if (hits.length === 0) return;
     dragging = true;
-    renderer.domElement.setPointerCapture(event.pointerId);
+    renderer.domElement.style.cursor = "grabbing";
+    renderer.domElement.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
   };
 
   const onPointerMove = (event) => {
@@ -2137,37 +2559,61 @@ const initThreeGame = () => {
     raycaster.setFromCamera(pointer, camera);
     raycaster.ray.intersectPlane(dragPlane, hitPoint);
     activeItem.position.set(
-      THREE.MathUtils.clamp(hitPoint.x, -3.3, 3.3),
-      1.25,
-      THREE.MathUtils.clamp(hitPoint.z, -0.8, 2.6)
+      THREE.MathUtils.clamp(hitPoint.x, -4.2, 4.2),
+      1.7,
+      THREE.MathUtils.clamp(hitPoint.z, -0.7, 1.75)
     );
   };
 
   const onPointerUp = (event) => {
     if (!dragging) return;
     dragging = false;
-    renderer.domElement.releasePointerCapture(event.pointerId);
+    renderer.domElement.style.cursor = "grab";
+    if (renderer.domElement.hasPointerCapture?.(event.pointerId)) {
+      renderer.domElement.releasePointerCapture(event.pointerId);
+    }
     checkDrop();
+  };
+
+  const onPointerCancel = (event) => {
+    dragging = false;
+    renderer.domElement.style.cursor = "grab";
+    if (renderer.domElement.hasPointerCapture?.(event.pointerId)) {
+      renderer.domElement.releasePointerCapture(event.pointerId);
+    }
   };
 
   const onResize = () => {
     if (!mount.isConnected) return;
-    camera.aspect = mount.clientWidth / mount.clientHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(mount.clientWidth, mount.clientHeight);
+    updateGameLayout();
+    renderer.setSize(gameWidth(), gameHeight(), false);
+    composer.setSize(gameWidth(), gameHeight());
+    smaaPass.setSize(gameWidth() * renderer.getPixelRatio(), gameHeight() * renderer.getPixelRatio());
   };
 
   renderer.domElement.addEventListener("pointerdown", onPointerDown);
   renderer.domElement.addEventListener("pointermove", onPointerMove);
   renderer.domElement.addEventListener("pointerup", onPointerUp);
+  renderer.domElement.addEventListener("pointercancel", onPointerCancel);
   window.addEventListener("resize", onResize);
 
+  updateGameLayout();
+  onResize();
   spawnItem();
 
   const animate = () => {
     animationId = window.requestAnimationFrame(animate);
     if (activeItem && !dragging) activeItem.rotation.y += 0.012;
-    renderer.render(scene, camera);
+    try {
+      if (useComposer) {
+        composer.render();
+      } else {
+        renderer.render(scene, camera);
+      }
+    } catch {
+      useComposer = false;
+      renderer.render(scene, camera);
+    }
   };
   animate();
 
@@ -2177,7 +2623,10 @@ const initThreeGame = () => {
     renderer.domElement.removeEventListener("pointerdown", onPointerDown);
     renderer.domElement.removeEventListener("pointermove", onPointerMove);
     renderer.domElement.removeEventListener("pointerup", onPointerUp);
+    renderer.domElement.removeEventListener("pointercancel", onPointerCancel);
     renderer.dispose();
+    composer.dispose();
+    pmremGenerator.dispose();
     mount.replaceChildren();
   };
 };
@@ -2279,7 +2728,7 @@ const initIncomingBinFromUrl = () => {
 
 const registerServiceWorker = () => {
   if (!("serviceWorker" in navigator)) return;
-  window.addEventListener("load", () => {
+  const register = () => {
     navigator.serviceWorker.register("/sw.js").then((registration) => {
       const showUpdateReady = (worker) => {
         waitingServiceWorker = worker;
@@ -2308,7 +2757,10 @@ const registerServiceWorker = () => {
     }).catch(() => {
       // The app still works normally if the browser blocks service workers.
     });
-  });
+  };
+
+  if (document.readyState === "complete") register();
+  else window.addEventListener("load", register, { once: true });
 
   let refreshing = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
@@ -2329,24 +2781,91 @@ const renderInstallPrompt = () => {
         <strong>Install EcoCycle</strong>
         <span>Add it to your phone for a full-screen app experience.</span>
       </div>
-      <button class="primary-btn" data-action="install-pwa">Install</button>
+      <div class="install-prompt-actions">
+        <button class="primary-btn" data-action="install-pwa">Install</button>
+        <button class="install-close-btn" data-action="close-install-prompt" type="button" aria-label="Close install notification">&times;</button>
+      </div>
     `;
     document.body.appendChild(prompt);
   }
 
-  prompt.classList.toggle("hidden", !deferredInstallPrompt);
+  prompt.classList.toggle("hidden", !deferredInstallPrompt || installPromptDismissed);
 };
 
 const isStandaloneApp = () =>
   window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 
+const canUseInstallPrompt = () =>
+  window.isSecureContext || ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+
+const isAndroidDevice = () => /android/i.test(window.navigator.userAgent);
+const isAppleMobileDevice = () => /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+const isChromiumBrowser = () => /chrome|crios|edg|opr|samsungbrowser/i.test(window.navigator.userAgent);
+
+const waitForInstallPrompt = (timeout = 1400) => {
+  if (deferredInstallPrompt) return Promise.resolve(deferredInstallPrompt);
+  return new Promise((resolve) => {
+    const waiter = (event) => {
+      window.clearTimeout(timer);
+      if (installPromptWaiter === waiter) installPromptWaiter = null;
+      resolve(event);
+    };
+    const timer = window.setTimeout(() => {
+      if (installPromptWaiter === waiter) installPromptWaiter = null;
+      resolve(null);
+    }, timeout);
+
+    installPromptWaiter = waiter;
+  });
+};
+
 const installHelpText = () => {
-  const isAppleMobile = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
-  if (isAppleMobile) {
+  if (isAppleMobileDevice()) {
     return "On iPhone or iPad, open this site in Safari, tap Share, then choose Add to Home Screen.";
   }
 
-  return "On desktop or Android Chrome, use the Install icon in the address bar or browser menu. If it does not appear yet, refresh once and try again.";
+  if (isAndroidDevice()) {
+    return "On Android Chrome, tap Install again after the page finishes loading. If the prompt still does not appear, open the browser menu and choose Add to Home screen or Install app.";
+  }
+
+  if (!canUseInstallPrompt()) {
+    return "Install works after the app is opened from HTTPS or localhost. Start the dev server with localhost, or deploy the site with HTTPS, then tap Install again.";
+  }
+
+  return "On desktop Chrome or Edge, click the install icon in the address bar. You can also open the browser menu and choose Install EcoCycle or Install page as app.";
+};
+
+const installHelpHtml = () => {
+  if (isAppleMobileDevice()) {
+    return `
+      <p>iPhone and iPad do not allow websites to open the install popup directly.</p>
+      <ol style="text-align:left">
+        <li>Open EcoCycle in Safari.</li>
+        <li>Tap the Share button.</li>
+        <li>Choose <strong>Add to Home Screen</strong>.</li>
+      </ol>
+    `;
+  }
+
+  if (isAndroidDevice()) {
+    return `
+      <p>Install EcoCycle as a mobile web app from Chrome.</p>
+      <ol style="text-align:left">
+        <li>Use Chrome on HTTPS or localhost.</li>
+        <li>Tap the browser menu.</li>
+        <li>Choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+      </ol>
+    `;
+  }
+
+  return `
+    <p>Install EcoCycle as a desktop app from Chrome or Edge.</p>
+    <ol style="text-align:left">
+      <li>Use HTTPS or localhost.</li>
+      <li>Click the install icon in the address bar.</li>
+      <li>Or open the browser menu and choose <strong>Install EcoCycle</strong>.</li>
+    </ol>
+  `;
 };
 
 const showInstallPrompt = async () => {
@@ -2355,10 +2874,15 @@ const showInstallPrompt = async () => {
     return;
   }
 
+  if (!deferredInstallPrompt && canUseInstallPrompt() && isChromiumBrowser()) {
+    await navigator.serviceWorker?.ready?.catch(() => undefined);
+    await waitForInstallPrompt();
+  }
+
   if (!deferredInstallPrompt) {
     Swal.fire({
       title: "Install EcoCycle",
-      text: installHelpText(),
+      html: installHelpHtml(),
       icon: "info",
       confirmButtonText: "Got it",
       confirmButtonColor: "#0b0b0d",
@@ -2366,67 +2890,52 @@ const showInstallPrompt = async () => {
     return;
   }
 
-  deferredInstallPrompt.prompt();
-  await deferredInstallPrompt.userChoice;
+  const promptEvent = deferredInstallPrompt;
   deferredInstallPrompt = null;
-  renderInstallPrompt();
+
+  try {
+    await promptEvent.prompt();
+    const choice = await promptEvent.userChoice;
+    if (choice?.outcome === "accepted") showToast("Installing EcoCycle...");
+  } catch {
+    Swal.fire({
+      title: "Install EcoCycle",
+      text: installHelpText(),
+      icon: "info",
+      confirmButtonText: "Got it",
+      confirmButtonColor: "#0b0b0d",
+    });
+  } finally {
+    renderInstallPrompt();
+  }
 };
 
-const initPwaInstallPrompt = () => {
+const initInstallPromptListeners = () => {
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     deferredInstallPrompt = event;
+    installPromptDismissed = false;
+    installPromptWaiter?.(event);
     renderInstallPrompt();
   });
 
   window.addEventListener("appinstalled", () => {
     deferredInstallPrompt = null;
+    showToast("EcoCycle installed successfully!");
     renderInstallPrompt();
-    showToast("EcoCycle installed.");
   });
 };
 
-const renderNetworkStatus = () => {
-  let prompt = document.querySelector("#networkStatus");
-  if (!prompt) {
-    prompt = document.createElement("div");
-    prompt.id = "networkStatus";
-    prompt.className = "install-prompt network-status hidden";
-    prompt.innerHTML = `
-      <div>
-        <strong>Offline mode</strong>
-        <span>You can keep browsing cached pages. Live sync resumes when connection returns.</span>
-      </div>
-    `;
-    document.body.appendChild(prompt);
-  }
-
-  prompt.classList.toggle("hidden", navigator.onLine);
-};
-
-const initNetworkStatus = () => {
-  renderNetworkStatus();
-  window.addEventListener("online", () => {
-    renderNetworkStatus();
-    showToast("Back online. Sync can resume.");
-  });
-  window.addEventListener("offline", renderNetworkStatus);
-};
-
-const startApp = async () => {
-  render();
+const initApp = async () => {
   await initializeDatabase();
-  initIncomingBinFromUrl();
   appReady = true;
+  initIncomingBinFromUrl();
+  initInstallPromptListeners();
+  registerServiceWorker();
   render();
 };
 
-document.addEventListener("click", handleClick);
-document.addEventListener("submit", handleSubmit);
-document.addEventListener("input", handleChange);
-document.addEventListener("change", handleChange);
-
-registerServiceWorker();
-initPwaInstallPrompt();
-initNetworkStatus();
-startApp();
+window.addEventListener("DOMContentLoaded", initApp);
+window.addEventListener("click", handleClick);
+window.addEventListener("submit", handleSubmit);
+window.addEventListener("change", handleChange);

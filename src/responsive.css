@@ -38,6 +38,23 @@ body {
   padding-inline: clamp(1rem, 4vw, 2rem);
 }
 
+@media (max-width: 1024px) {
+  .bento-shell,
+  .dashboard-shell {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bento-box.profile,
+  .bento-box.mascot,
+  .dashboard-card.full-width {
+    grid-column: span 2;
+  }
+
+  .bento-box.mascot {
+    grid-row: span 1;
+  }
+}
+
 @media (max-width: 980px) {
   .hero-copy,
   .sarawak-hero-copy,
@@ -140,30 +157,40 @@ body {
   }
 }
 
-@media (max-width: 680px) {
+@media (max-width: 640px) {
   .site-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding: 0.85rem 0.85rem;
   }
 
   .site-nav .brand {
-    width: 100%;
+    width: auto;
     font-size: 1.05rem;
   }
 
-  .hero-copy h1,
-  .sarawak-hero h1,
-  .guest-page-hero h1,
-  .support-hero h1 {
-    font-size: clamp(2rem, 8vw, 3.2rem);
+  .desktop-nav {
+    display: none;
   }
 
-  .footer-links {
-    margin-top: 1rem;
+  .nav-menu-toggle {
+    display: grid;
   }
 
-  .footer-brand,
-  .footer-links {
-    width: 100%;
+  .account-chip .account-name {
+    display: none;
+  }
+
+  .bento-shell,
+  .dashboard-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bento-box.profile,
+  .bento-box.mascot,
+  .dashboard-card.full-width {
+    grid-column: span 1;
   }
 }
 
@@ -265,6 +292,14 @@ body {
   }
 }
 
+@media (max-width: 900px) and (orientation: portrait) {
+  .sarawak-hero-bg video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
 @media (max-width: 900px) and (orientation: landscape) {
   .sarawak-hero {
     min-height: calc(100vh - var(--nav-offset));
@@ -299,3 +334,640 @@ body {
   }
 }
 
+@media (max-width: 1024px) {
+  .site-nav .nav-links {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    min-width: 0;
+    justify-self: start;
+  }
+
+  .site-nav .nav-links .dropdown {
+    width: auto !important;
+  }
+
+  .site-nav .nav-links .main-menu {
+    position: static !important;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-menu {
+    position: fixed !important;
+    top: calc(68px + env(safe-area-inset-top)) !important;
+    left: max(0.65rem, env(safe-area-inset-left)) !important;
+    right: auto !important;
+    width: min(260px, calc(100vw - 1.3rem)) !important;
+    max-width: min(260px, calc(100vw - 1.3rem)) !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    transform: none !important;
+    border-radius: 0.95rem !important;
+    padding: 0.45rem !important;
+    text-align: left;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-item {
+    justify-content: flex-start !important;
+    min-height: 46px;
+    padding: 0.8rem 0.95rem !important;
+    text-align: left !important;
+    white-space: normal;
+  }
+
+  .real-sarawak-hero.sarawak-hero {
+    min-height: 100svh !important;
+    padding: 0 !important;
+    overflow: hidden;
+  }
+
+  .real-sarawak-hero .sarawak-hero-bg {
+    position: absolute !important;
+    inset: 0 !important;
+    min-height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .real-sarawak-hero .sarawak-hero-bg iframe,
+  .real-sarawak-hero .sarawak-hero-bg video {
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    width: max(100vw, 177.78svh) !important;
+    height: max(100svh, 56.25vw) !important;
+    min-width: 100vw !important;
+    min-height: 100svh !important;
+    transform: translate(-50%, -50%) !important;
+    object-fit: cover !important;
+    opacity: 0.96 !important;
+  }
+
+  .real-sarawak-hero .sarawak-hero-copy {
+    position: relative !important;
+    z-index: 4 !important;
+    min-height: 100svh;
+    display: grid;
+    align-content: end;
+    padding: calc(76px + env(safe-area-inset-top)) 1rem 2rem !important;
+    background: linear-gradient(180deg, rgba(5, 19, 13, 0.1) 0%, rgba(5, 19, 13, 0.22) 38%, rgba(5, 19, 13, 0.72) 100%) !important;
+    backdrop-filter: none !important;
+  }
+
+  .real-sarawak-hero .sarawak-hero-video-mask {
+    background: linear-gradient(180deg, rgba(5, 19, 13, 0.08) 0%, rgba(5, 19, 13, 0.22) 45%, rgba(5, 19, 13, 0.72) 100%) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-nav .nav-links .main-menu .dropdown-menu {
+    top: calc(62px + env(safe-area-inset-top)) !important;
+    left: max(0.5rem, env(safe-area-inset-left)) !important;
+    width: min(230px, calc(100vw - 1rem)) !important;
+    max-width: min(230px, calc(100vw - 1rem)) !important;
+  }
+
+  .real-sarawak-hero .sarawak-hero-copy {
+    padding: calc(68px + env(safe-area-inset-top)) 0.9rem 1.6rem !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .site-nav {
+    justify-content: flex-start !important;
+    gap: 0.65rem !important;
+  }
+
+  .site-nav .nav-links {
+    order: -1 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .site-nav .brand {
+    order: 0 !important;
+    flex: 1 1 auto;
+    width: auto !important;
+    min-width: 0;
+    max-width: none !important;
+  }
+
+  .site-nav .brand span {
+    display: inline-block !important;
+    max-width: none !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: nowrap !important;
+  }
+
+  .site-nav .nav-actions {
+    order: 1 !important;
+    margin-left: auto !important;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-menu {
+    position: fixed !important;
+    inset: calc(72px + env(safe-area-inset-top)) 0 0 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: calc(100svh - 72px - env(safe-area-inset-top)) !important;
+    max-height: none !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    transform: none !important;
+    border: 0 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.22) !important;
+    border-radius: 0 !important;
+    padding: clamp(1rem, 3vw, 1.5rem) !important;
+    background:
+      linear-gradient(135deg, rgba(216, 245, 200, 0.2), rgba(255, 255, 255, 0.08)),
+      rgba(10, 31, 22, 0.78) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 28px 80px rgba(0, 0, 0, 0.28) !important;
+    backdrop-filter: blur(26px) saturate(1.5) !important;
+    -webkit-backdrop-filter: blur(26px) saturate(1.5) !important;
+    overflow-y: auto !important;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-menu.show {
+    display: grid !important;
+    align-content: start;
+    gap: 0.7rem;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-menu li {
+    width: 100%;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-item {
+    width: 100% !important;
+    min-height: 58px !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 18px !important;
+    background: rgba(255, 255, 255, 0.12) !important;
+    color: #f7ffe9 !important;
+    box-shadow: 0 16px 36px rgba(4, 18, 12, 0.18);
+    font-size: clamp(1.05rem, 2.8vw, 1.35rem) !important;
+    letter-spacing: 0;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-item.active,
+  .site-nav .nav-links .main-menu .dropdown-item:hover {
+    background: rgba(216, 245, 200, 0.28) !important;
+    color: #ffffff !important;
+    border-color: rgba(216, 245, 200, 0.55) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-nav {
+    gap: 0.48rem !important;
+  }
+
+  .site-nav .brand {
+    font-size: clamp(0.82rem, 3.35vw, 0.98rem) !important;
+    gap: 0.38rem !important;
+  }
+
+  .site-nav .brand img {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .site-nav .nav-actions {
+    gap: 0.28rem !important;
+  }
+
+  .site-nav .install-nav-btn {
+    min-width: 36px !important;
+    min-height: 36px !important;
+    width: 36px !important;
+    height: 36px !important;
+    padding: 0 !important;
+  }
+
+  .site-nav .join-now-btn {
+    min-height: 36px !important;
+    padding: 0.42rem 0.54rem !important;
+    font-size: 0.72rem !important;
+    white-space: nowrap;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-menu {
+    inset: calc(64px + env(safe-area-inset-top)) 0 0 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: calc(100svh - 64px - env(safe-area-inset-top)) !important;
+    padding: 0.9rem !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .site-nav {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    row-gap: 0.55rem !important;
+    min-height: 104px !important;
+    padding-block: 0.6rem !important;
+  }
+
+  .site-nav .brand {
+    order: 0 !important;
+    flex: 1 0 100% !important;
+    width: 100% !important;
+    justify-content: center !important;
+    text-align: center;
+  }
+
+  .site-nav .brand span {
+    white-space: nowrap !important;
+  }
+
+  .site-nav .nav-links {
+    order: 1 !important;
+    flex: 0 0 auto !important;
+  }
+
+  .site-nav .nav-actions {
+    order: 2 !important;
+    flex: 1 1 auto !important;
+    justify-content: flex-end !important;
+    margin-left: auto !important;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-menu {
+    inset: calc(104px + env(safe-area-inset-top)) 0 0 0 !important;
+    height: calc(100svh - 104px - env(safe-area-inset-top)) !important;
+  }
+
+  .real-sarawak-hero .sarawak-hero-copy {
+    padding-top: calc(112px + env(safe-area-inset-top)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-nav {
+    min-height: 96px !important;
+    padding: 0.52rem 0.72rem !important;
+  }
+
+  .site-nav .brand {
+    justify-content: flex-start !important;
+    text-align: left;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-menu {
+    inset: calc(96px + env(safe-area-inset-top)) 0 0 0 !important;
+    height: calc(100svh - 96px - env(safe-area-inset-top)) !important;
+  }
+
+  .real-sarawak-hero .sarawak-hero-copy {
+    padding-top: calc(104px + env(safe-area-inset-top)) !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  body[data-role="guest"] .site-nav .nav-actions {
+    flex: 1 1 auto !important;
+    justify-content: flex-end !important;
+    margin-left: auto !important;
+  }
+
+  body[data-role="guest"] .site-nav .join-now-btn {
+    order: 0;
+    width: auto !important;
+    min-width: 132px !important;
+    max-width: 46vw !important;
+    flex: 0 0 auto !important;
+  }
+
+  body[data-role="guest"] .site-nav .install-nav-btn {
+    order: 1;
+    flex: 0 0 auto !important;
+  }
+}
+
+@media (max-width: 640px) {
+  body[data-role="guest"] .site-nav .join-now-btn {
+    min-width: 118px !important;
+    max-width: 44vw !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .site-nav .brand span::first-letter {
+    color: inherit !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  body[data-role="guest"] .site-nav .brand,
+  body[data-role="guest"] .site-nav .brand span {
+    color: #10251d !important;
+  }
+
+  body[data-role="guest"] .site-nav .nav-links {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    margin-right: 0.55rem !important;
+  }
+
+  body[data-role="guest"] .site-nav .nav-actions {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    margin-left: auto !important;
+    align-self: center !important;
+    display: inline-flex !important;
+    flex-wrap: nowrap !important;
+  }
+
+  body[data-role="guest"] .site-nav .join-now-btn,
+  body[data-role="guest"] .site-nav .install-nav-btn {
+    align-self: center !important;
+  }
+}
+
+@media (max-width: 640px) {
+  body[data-role="guest"] .site-nav {
+    column-gap: 0.45rem !important;
+  }
+
+  body[data-role="guest"] .site-nav .join-now-btn {
+    min-width: 104px !important;
+    max-width: 40vw !important;
+  }
+}
+
+@media (max-width: 1024px) and (orientation: landscape) {
+  :root {
+    --nav-offset: 64px;
+  }
+
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden !important;
+  }
+
+  #app {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .site-nav {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    min-height: 64px !important;
+    padding: 0.48rem max(0.75rem, env(safe-area-inset-left)) 0.48rem max(0.75rem, env(safe-area-inset-left)) !important;
+    gap: 0.5rem !important;
+  }
+
+  .site-nav .nav-links {
+    order: 0 !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    margin: 0 !important;
+  }
+
+  .site-nav .brand {
+    order: 1 !important;
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    font-size: clamp(0.88rem, 1.8vw, 1.05rem) !important;
+    gap: 0.38rem !important;
+  }
+
+  .site-nav .brand img {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  .site-nav .brand span {
+    max-width: min(38vw, 260px) !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .site-nav .nav-actions {
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    margin-left: auto !important;
+    display: inline-flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 0.35rem !important;
+  }
+
+  .site-nav .nav-menu-toggle,
+  .site-nav .install-nav-btn,
+  .site-nav .account-chip {
+    min-width: 38px !important;
+    width: 38px !important;
+    min-height: 38px !important;
+    height: 38px !important;
+    padding: 0 !important;
+  }
+
+  .site-nav .join-now-btn {
+    width: auto !important;
+    min-width: 102px !important;
+    max-width: 28vw !important;
+    min-height: 38px !important;
+    padding: 0.42rem 0.65rem !important;
+    font-size: 0.72rem !important;
+    white-space: nowrap !important;
+    flex: 0 0 auto !important;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-menu {
+    inset: calc(64px + env(safe-area-inset-top)) 0 0 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: calc(100svh - 64px - env(safe-area-inset-top)) !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    padding: 0.75rem clamp(0.85rem, 3vw, 1.4rem) !important;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-menu.show {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 0.55rem;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-item {
+    min-height: 46px !important;
+    padding: 0.65rem 0.8rem !important;
+    font-size: 0.95rem !important;
+  }
+
+  .page,
+  .guest-page,
+  .education-page,
+  .support-page,
+  .admin-dashboard,
+  .profile-settings-page {
+    width: 100%;
+    max-width: 100%;
+    padding-inline: clamp(0.75rem, 2.2vw, 1.5rem) !important;
+    overflow-x: clip;
+  }
+
+  .real-sarawak-hero.sarawak-hero {
+    min-height: calc(100svh - 64px) !important;
+  }
+
+  .real-sarawak-hero .sarawak-hero-copy {
+    min-height: calc(100svh - 64px) !important;
+    padding: calc(70px + env(safe-area-inset-top)) clamp(1rem, 3vw, 2rem) 1.2rem !important;
+    align-content: center !important;
+  }
+
+  .sarawak-hero h1,
+  .guest-page-hero h1,
+  .support-hero h1,
+  .section-title h1,
+  .dashboard-header h1 {
+    font-size: clamp(2rem, 5.2vw, 3.2rem) !important;
+    line-height: 0.95 !important;
+  }
+
+  .hero-actions,
+  .dashboard-actions,
+  .crud-actions,
+  .scanner-actions {
+    flex-wrap: wrap !important;
+    gap: 0.55rem !important;
+  }
+
+  .hero-actions .btn,
+  .hero-actions .primary-btn,
+  .hero-actions .text-btn {
+    width: auto !important;
+    min-width: min(180px, 42vw) !important;
+  }
+
+  .grid-2,
+  .grid-3,
+  .grid-4,
+  .dashboard-stats,
+  .admin-dashboard-kpis,
+  .scan-status-strip,
+  .station-bin-set,
+  .education-mosaic-grid,
+  .education-resource-mosaic,
+  .profile-settings-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .dashboard-layout,
+  .admin-dashboard-grid,
+  .scan-page-shell,
+  .map-layout,
+  .creative-map-layout,
+  .collection-layout,
+  .profile-shell,
+  .learn-concept-hero,
+  .education-video-mosaic,
+  .support-command-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .leaflet-map,
+  .collection-map,
+  .education-video-frame,
+  .creative-map-wrap,
+  .three-game,
+  .qr-reader,
+  .ai-sensor-preview,
+  .scanner-visual-panel {
+    max-width: 100% !important;
+    min-height: clamp(240px, 58svh, 380px) !important;
+  }
+
+  .three-game-shell {
+    overflow: hidden !important;
+  }
+
+  .table-wrap,
+  .admin-table-wrap,
+  .crud-table-wrap {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+  }
+
+  img,
+  video,
+  iframe,
+  canvas {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 740px) and (orientation: landscape) {
+  .site-nav .brand span {
+    max-width: 32vw !important;
+  }
+
+  .site-nav .join-now-btn {
+    min-width: 92px !important;
+    max-width: 24vw !important;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-menu.show,
+  .grid-2,
+  .grid-3,
+  .grid-4,
+  .dashboard-stats,
+  .admin-dashboard-kpis,
+  .scan-status-strip,
+  .station-bin-set,
+  .education-mosaic-grid,
+  .education-resource-mosaic,
+  .profile-settings-stats {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .sarawak-hero h1,
+  .guest-page-hero h1,
+  .support-hero h1,
+  .section-title h1,
+  .dashboard-header h1 {
+    font-size: clamp(1.85rem, 6vw, 2.7rem) !important;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .real-sarawak-hero.sarawak-hero {
+    background: #050807 !important;
+  }
+
+  .real-sarawak-hero .sarawak-hero-bg {
+    inset: 0 !important;
+    background: #050807 !important;
+  }
+
+  .real-sarawak-hero .sarawak-hero-bg iframe,
+  .real-sarawak-hero .sarawak-hero-bg video,
+  .real-sarawak-hero .sarawak-hero-bg img {
+    opacity: 0.88 !important;
+  }
+
+  .real-sarawak-hero .sarawak-hero-video-mask {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: rgba(0, 0, 0, 0.82) !important;
+  }
+
+  .real-sarawak-hero .sarawak-hero-copy {
+    background: transparent !important;
+  }
+}

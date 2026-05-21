@@ -58,33 +58,60 @@ const reportTable = (title, headers, rows) => `
 const renderAdminDashboard = () => {
   const totalUsers = state.users.filter((user) => user.role === "user").length;
   const totalScans = state.records.length;
-  const pointsIssued = state.records.filter((record) => record.points > 0).length;
+  const validScans = state.records.filter((record) => record.points > 0).length;
   const pendingRequests = state.redeemed.filter((item) => item.status === "Pending").length;
   const problemBins = state.bins.filter((bin) => bin.status !== "Available");
   const recentRecords = state.records.slice(0, 5);
-  const recentRequests = state.redeemed.slice(0, 4);
+  const recentRequests = state.redeemed.slice(0, 5);
 
   return `
     <section class="page admin-dashboard">
       <div class="dashboard-header">
-        ${sectionTitle("Admin Dashboard", "Monitor system health, pending work, and recycling activity from one place.")}
+        <div class="header-text">
+          <p class="eyebrow">ECOCYCLE SARAWAK</p>
+          <h1>Admin Dashboard</h1>
+          <p>Monitor system health, pending work, and recycling activity from one place.</p>
+          <div class="admin-dashboard-kpis" aria-label="Admin dashboard summary">
+            <span><b>${totalUsers}</b>Users</span>
+            <span><b>${totalScans}</b>Scans</span>
+            <span><b>${validScans}</b>Valid</span>
+            <span><b>${pendingRequests}</b>Pending</span>
+          </div>
+        </div>
         <div class="dashboard-actions">
-          <button class="btn btn-outline-success" data-page="manage-users">Manage Users</button>
-          <button class="btn btn-outline-success" data-page="manage-rewards">Manage Items</button>
-          <button class="btn btn-outline-success" data-page="reports">View Reports</button>
-          <button class="btn btn-success" data-page="redemptions">Review Requests</button>
+          <button class="btn btn-light" data-page="manage-users">Manage Users</button>
+          <button class="btn btn-light" data-page="manage-rewards">Manage Items</button>
+          <button class="btn btn-light" data-page="reports">View Reports</button>
+          <button class="btn btn-dark" data-page="redemptions">Review Requests</button>
         </div>
       </div>
 
-      <div class="grid-4 dashboard-stats">
-        ${stat("Total Users", totalUsers)}
-        ${stat("Total Scans", totalScans)}
-        ${stat("Points Issued", pointsIssued)}
-        ${stat("Pending Requests", pendingRequests)}
-      </div>
+      <div class="dashboard-layout admin-dashboard-grid">
+        <section class="panel card shadow-sm dashboard-action-panel">
+          <div class="panel-head"><div><p class="eyebrow">Action Needed</p><h2>Pending Work</h2></div></div>
+          <div class="work-list">
+            <button data-page="redemptions"><strong>${pendingRequests}</strong><span>redemption requests waiting</span></button>
+            <button data-page="bin-status"><strong>${problemBins.length}</strong><span>bins full, offline, or maintenance</span></button>
+            <button data-page="manage-users"><strong>${totalUsers}</strong><span>registered users managed here</span></button>
+          </div>
+        </section>
 
-      <div class="dashboard-layout">
-        <section class="panel card shadow-sm">
+        <section class="panel card shadow-sm dashboard-requests-panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">Rewards</p><h2>Recent Requests</h2></div>
+            <button class="btn btn-sm btn-outline-success" data-page="redemptions">Open</button>
+          </div>
+          <div class="request-list">
+            ${recentRequests.length === 0 ? `<p class="lead">No redemption requests yet.</p>` : recentRequests.map((item) => `
+              <div>
+                <span><strong>${escapeHtml(item.item)}</strong><small>${escapeHtml(item.user)} - ${escapeHtml(item.code)}</small></span>
+                <b class="badge">${escapeHtml(item.status)}</b>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+
+        <section class="panel card shadow-sm dashboard-bin-panel">
           <div class="panel-head">
             <div><p class="eyebrow">Bin Operations</p><h2>Bin Status</h2></div>
             <button class="btn btn-sm btn-outline-success" data-page="manage-bins">Manage</button>
@@ -99,36 +126,12 @@ const renderAdminDashboard = () => {
           </div>
         </section>
 
-        <section class="panel card shadow-sm">
-          <div class="panel-head"><div><p class="eyebrow">Action Needed</p><h2>Pending Work</h2></div></div>
-          <div class="work-list">
-            <button data-page="redemptions"><strong>${pendingRequests}</strong><span>redemption requests waiting</span></button>
-            <button data-page="bin-status"><strong>${problemBins.length}</strong><span>bins full, offline, or maintenance</span></button>
-            <button data-page="manage-users"><strong>${totalUsers}</strong><span>registered users managed here</span></button>
-          </div>
-        </section>
-
-        <section class="panel card shadow-sm wide-panel">
+        <section class="panel card shadow-sm dashboard-records-panel">
           <div class="panel-head">
             <div><p class="eyebrow">Latest Activity</p><h2>Waste Records</h2></div>
             <button class="btn btn-sm btn-outline-success" data-page="waste-records">Open Records</button>
           </div>
           ${miniRecords(recentRecords)}
-        </section>
-
-        <section class="panel card shadow-sm">
-          <div class="panel-head">
-            <div><p class="eyebrow">Rewards</p><h2>Recent Requests</h2></div>
-            <button class="btn btn-sm btn-outline-success" data-page="redemptions">Open</button>
-          </div>
-          <div class="request-list">
-            ${recentRequests.length === 0 ? `<p class="lead">No redemption requests yet.</p>` : recentRequests.map((item) => `
-              <div>
-                <span><strong>${escapeHtml(item.item)}</strong><small>${escapeHtml(item.user)} - ${escapeHtml(item.code)}</small></span>
-                <b class="badge">${escapeHtml(item.status)}</b>
-              </div>
-            `).join("")}
-          </div>
         </section>
       </div>
     </section>
@@ -159,7 +162,10 @@ const renderManageBins = () => {
   const availableBins = state.bins.filter((bin) => bin.status === "Available").length;
   const attentionBins = state.bins.filter((bin) => bin.status !== "Available").length;
   const statusOptions = ["Available", "Full", "Maintenance", "Offline"];
+  const categoryOptions = ["Paper", "Plastic", "Aluminium", "General Waste"];
   const categoryClass = (category) => category.toLowerCase().replaceAll(" ", "-");
+  const optionList = (options, selected) => options.map((option) => `<option value="${escapeHtml(option)}" ${selected === option ? "selected" : ""}>${escapeHtml(option)}</option>`).join("");
+  const stationOptions = [...new Set(stations.map((station) => station.name))];
 
   return `
   <section class="page admin-bin-page">
@@ -167,10 +173,35 @@ const renderManageBins = () => {
       <div>
         <p class="eyebrow">Bin Operations</p>
         <h1>Manage Bins</h1>
-        <p class="lead">Update each smart bin zone status by station. Keep unavailable bins visible for field checks and user routing.</p>
+        <p class="lead">Create, read, update, and delete every smart-bin record. Changes are saved to the app database and sync queue.</p>
       </div>
-      <button class="btn btn-success primary-btn" data-action="add-bin">Add Bin</button>
     </div>
+
+    <section class="admin-bin-create panel card shadow-sm">
+      <div class="panel-head">
+        <div><p class="eyebrow">Create Bin</p><h2>Add new smart bin</h2></div>
+      </div>
+      <form class="admin-bin-edit-form" data-form="add-bin">
+        <label>Station<input name="station" list="adminStationOptions" placeholder="Example: Saradise" required></label>
+        <label>Bin Name<input name="name" placeholder="Example: Saradise Plastic Bin" required></label>
+        <label>Location<input name="location" placeholder="Example: Saradise, Kuching" required></label>
+        <label>Category<select name="accepts">${optionList(categoryOptions, "Plastic")}</select></label>
+        <label>Status<select name="status">${optionList(statusOptions, "Available")}</select></label>
+        <label>QR Code<input name="qrCode" placeholder="Auto: SAR-PLA" required></label>
+        <label>Latitude<input name="lat" type="number" step="0.000001" value="1.51983"></label>
+        <label>Longitude<input name="lng" type="number" step="0.000001" value="110.351"></label>
+        <label>Map X<input name="mapX" type="number" min="0" max="100" value="50"></label>
+        <label>Map Y<input name="mapY" type="number" min="0" max="100" value="50"></label>
+        <div class="admin-bin-qr-preview">
+          <canvas data-bin-qr-preview></canvas>
+          <span data-bin-qr-url>QR preview updates automatically</span>
+        </div>
+        <button class="btn btn-success primary-btn" type="submit">Create Bin</button>
+      </form>
+      <datalist id="adminStationOptions">
+        ${stationOptions.map((stationName) => `<option value="${escapeHtml(stationName)}"></option>`).join("")}
+      </datalist>
+    </section>
 
     <div class="admin-bin-stats">
       ${stat("Stations", stations.length)}
@@ -195,16 +226,37 @@ const renderManageBins = () => {
           </div>
           <div class="admin-bin-list">
             ${station.bins.map((bin) => `
-              <label class="admin-bin-row ${categoryClass(bin.accepts)} ${bin.status.toLowerCase()}">
-                <span class="admin-bin-type">
-                  <b>${escapeHtml(bin.accepts)}</b>
-                  <small>${escapeHtml(bin.id)}</small>
-                </span>
-                <span class="admin-bin-current ${bin.status.toLowerCase()}">${escapeHtml(bin.status)}</span>
-                <select data-bin-status="${bin.id}" aria-label="${escapeHtml(bin.name)} status">
-                  ${statusOptions.map((status) => `<option ${bin.status === status ? "selected" : ""}>${status}</option>`).join("")}
-                </select>
-              </label>
+              <details class="admin-bin-row ${categoryClass(bin.accepts)} ${bin.status.toLowerCase()}">
+                <summary>
+                  <span class="admin-bin-type">
+                    <b>${escapeHtml(bin.accepts)}</b>
+                    <small>${escapeHtml(bin.id)} · ${escapeHtml(bin.qrCode || "No QR")}</small>
+                  </span>
+                  <span>${escapeHtml(bin.name)}</span>
+                  <span class="admin-bin-current ${bin.status.toLowerCase()}">${escapeHtml(bin.status)}</span>
+                </summary>
+                <form class="admin-bin-edit-form" data-form="edit-bin">
+                  <input name="binId" type="hidden" value="${escapeHtml(bin.id)}">
+                  <label>Station<input name="station" list="adminStationOptions" value="${escapeHtml(bin.station || station.name)}" required></label>
+                  <label>Bin Name<input name="name" value="${escapeHtml(bin.name)}" required></label>
+                  <label>Location<input name="location" value="${escapeHtml(bin.location)}" required></label>
+                  <label>Category<select name="accepts">${optionList(categoryOptions, bin.accepts)}</select></label>
+                  <label>Status<select name="status">${optionList(statusOptions, bin.status)}</select></label>
+                  <label>QR Code<input name="qrCode" value="${escapeHtml(bin.qrCode || "")}" required></label>
+                  <label>Latitude<input name="lat" type="number" step="0.000001" value="${bin.lat || ""}"></label>
+                  <label>Longitude<input name="lng" type="number" step="0.000001" value="${bin.lng || ""}"></label>
+                  <label>Map X<input name="mapX" type="number" min="0" max="100" value="${bin.mapX || 50}"></label>
+                  <label>Map Y<input name="mapY" type="number" min="0" max="100" value="${bin.mapY || 50}"></label>
+                  <div class="admin-bin-qr-preview">
+                    <canvas data-bin-qr-preview></canvas>
+                    <span data-bin-qr-url>QR preview updates automatically</span>
+                  </div>
+                  <div class="admin-bin-form-actions">
+                    <button class="btn btn-success primary-btn" type="submit">Save Bin</button>
+                    <button class="btn btn-danger danger-btn" type="button" data-delete-bin="${escapeHtml(bin.id)}">Delete Bin</button>
+                  </div>
+                </form>
+              </details>
             `).join("")}
           </div>
         </article>
@@ -465,8 +517,8 @@ const renderReports = () => {
   )}
       ${reportTable(
     "User Feedback",
-    ["User", "Email", "Issue", "Status", "Date"],
-    state.feedback.map((item) => [item.user, item.email, item.issue, item.status, item.date])
+    ["User", "Email", "Category", "Source", "Issue", "Status", "Date"],
+    state.feedback.map((item) => [item.user, item.email, item.category || "General feedback", item.source || "Contact form", item.issue, item.status, item.date])
   )}
     </section>
   `;

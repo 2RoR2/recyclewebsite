@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test:core": "node scripts/verify-core.js",
     "preview": "vite preview",
     "start": "node server.js",
     "server": "node server.js",
