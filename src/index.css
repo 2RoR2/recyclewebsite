@@ -2181,6 +2181,36 @@ textarea {
   text-transform: uppercase;
 }
 
+.simulation-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.simulation-options,
+.simulation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+}
+
+.simulation-chip {
+  border: 1px solid rgba(16, 25, 21, 0.16);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #101915;
+  min-height: 42px;
+  padding: 0.55rem 0.8rem;
+  font-weight: 800;
+}
+
+.simulation-chip.active,
+.simulation-chip:hover {
+  border-color: #0f8f3a;
+  background: #e9fbe9;
+  color: #0f5a20;
+}
+
 .ai-zone-wrapper:fullscreen {
   width: 100vw;
   height: 100vh;

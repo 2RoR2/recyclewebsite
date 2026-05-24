@@ -6,6 +6,7 @@ const syncedCollections = [
   "bins",
   "rewards",
   "records",
+  "transactions",
   "redeemed",
   "feedback",
   "learningRecords",

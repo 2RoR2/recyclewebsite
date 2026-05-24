@@ -127,6 +127,7 @@ const defaultState = {
   bins: defaultBins,
   rewards: defaultRewards,
   records: [],
+  transactions: [],
   redeemed: [],
   feedback: [],
   learningRecords: [],
@@ -252,6 +253,10 @@ const normalizeState = (loadedState) => {
         detectedCategory: normalizeCategoryLabel(record.detectedCategory),
       };
     }),
+    transactions: (loadedState.transactions || []).map((transaction) => ({
+      ...transaction,
+      wasteType: normalizeCategoryLabel(transaction.wasteType),
+    })),
     learningRecords: loadedState.learningRecords || [],
     feedback: (loadedState.feedback || []).map((item) => ({
       userId: null,

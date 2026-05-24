@@ -150,6 +150,7 @@ export const authService = {
 
     state.users = state.users.filter((item) => item.id !== user.id);
     state.records = state.records.filter((record) => record.userId !== user.id);
+    state.transactions = (state.transactions || []).filter((transaction) => transaction.userId !== user.id);
     state.redeemed = state.redeemed.filter((item) => item.userId !== user.id);
     state.learningRecords = state.learningRecords.filter((item) => item.userId !== user.id);
     state.feedback = state.feedback.filter((item) => item.userId !== user.id);
@@ -199,8 +200,15 @@ export const recyclingService = {
       return "Camera check missing. Please use the device camera check before recording disposal.";
     }
 
-    state.records.unshift({
-      id: Date.now(),
+    if (state.sensorCheck.presenceDetected === false) {
+      return "No rubbish item was detected inside the selected sensor zone. Move the item into the active zone and scan again.";
+    }
+
+    const id = Date.now();
+    const timestamp = nowLabel();
+    const result = isCorrect ? "Correct" : "Wrong Bin Detected";
+    const record = {
+      id,
       userId: user.id,
       user: user.name,
       binId: zoneBin.id,
@@ -212,6 +220,7 @@ export const recyclingService = {
       detectedObject,
       placedZone,
       presenceDetected: state.sensorCheck.presenceDetected ?? true,
+      simulated: Boolean(state.sensorCheck.simulated || state.aiDetection?.simulated),
       locationVerified: state.locationCheck.verified,
       distanceMeters: state.locationCheck.distance,
       detectionError: isCorrect ? 0 : 1,
@@ -219,8 +228,26 @@ export const recyclingService = {
       verification: `GPS ${state.locationCheck.distance}m, YOLO ${state.sensorCheck.confidence}% confidence`,
       points,
       status: isCorrect ? "Valid" : "Wrong Bin",
-      date: nowLabel(),
-    });
+      date: timestamp,
+    };
+    const transaction = {
+      id,
+      userId: user.id,
+      binId: zoneBin.id,
+      wasteType: detectedCategory,
+      result,
+      points,
+      timestamp,
+      detectedObject,
+      selectedZone: placedZone,
+      expectedWaste: expectedCategory,
+      presenceDetected: state.sensorCheck.presenceDetected ?? true,
+      simulated: Boolean(state.sensorCheck.simulated || state.aiDetection?.simulated),
+    };
+
+    state.records.unshift(record);
+    state.transactions = state.transactions || [];
+    state.transactions.unshift(transaction);
 
     user.points = Math.max(0, user.points + points);
 
@@ -231,8 +258,8 @@ export const recyclingService = {
     state.page = "points";
     saveState();
     return isCorrect
-      ? `${detectedObject} detected as ${detectedCategory}. ${zoneBin.name} matched the placed zone: +1 point.`
-      : `${detectedObject} detected as ${detectedCategory}. Placed zone accepts ${expectedCategory}. No points were added.`;
+      ? `${detectedCategory} was detected. It matches the ${expectedCategory} bin. You earned 1 point.`
+      : `${detectedCategory} was detected. It should be placed in the ${detectedCategory} bin, not the ${expectedCategory} bin. No point was added.`;
   },
 };
 
@@ -420,6 +447,7 @@ export const adminService = {
 
     state.users = state.users.filter((user) => user.id !== id);
     state.records = state.records.filter((record) => record.userId !== id);
+    state.transactions = (state.transactions || []).filter((transaction) => transaction.userId !== id);
     state.redeemed = state.redeemed.filter((item) => item.userId !== id);
     state.learningRecords = state.learningRecords.filter((item) => item.userId !== id);
     state.feedback = state.feedback.filter((item) => item.userId !== id);

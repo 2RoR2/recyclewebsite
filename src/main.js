@@ -26,6 +26,7 @@ import { renderNav } from "./features/shared/navigation.js";
 import { binStations, renderNotFound } from "./features/shared/templates.js";
 import { renderUserPage } from "./features/user/pages.js";
 import { getScanTarget, normalizeCode } from "./features/qr/scan-routing.js";
+import { selectedZoneSourceRectFromRects } from "./features/ai/zone-crop.js";
 
 const app = document.querySelector("#app");
 const navLinks = document.querySelector("#navLinks");
@@ -36,6 +37,7 @@ let reportChart = null;
 let threeGameCleanup = null;
 let aiCameraStream = null;
 let aiScanBusy = false;
+let qrScanBusy = false;
 let gpsPromptOpen = false;
 let autoLocationBusy = false;
 let aiCountdownOpen = false;
@@ -567,6 +569,13 @@ const handleUserActions = (target) => {
       if (zoneLabel) zoneLabel.textContent = zone;
       document.querySelector(".ai-zone-wrapper")?.classList.add("has-selected-zone");
       initAiSensorCameras();
+      if (state.locationCheck?.verified) {
+        window.setTimeout(() => {
+          void promptStartDetection();
+        }, 350);
+      } else {
+        showToast("Zone selected. Verify GPS, then run AI detection.");
+      }
     }
   }
 
@@ -841,12 +850,20 @@ const normalizeAiDetection = (result) => {
     ...result,
     confidence,
     rawConfidence,
-    detectorAvailable: result?.detectorAvailable !== false && result?.presenceDetected !== false,
+    presenceDetected: result?.presenceDetected !== false,
+    detectorAvailable: result?.detectorAvailable !== false,
     topPredictions: Array.isArray(result?.topPredictions) ? result.topPredictions : [],
   };
 };
 
 const detectWasteWithAi = async (file) => {
+  try {
+    const { detectWasteInBrowser } = await import("./features/ai/browser-detector.js");
+    return normalizeAiDetection(await detectWasteInBrowser(file));
+  } catch {
+    // Browser AI is free and preferred. Hosted/local APIs are only fallbacks.
+  }
+
   const formData = new FormData();
   formData.append("image", file);
 
@@ -875,35 +892,6 @@ const detectWasteWithAi = async (file) => {
   }
 };
 
-const AI_ZONE_EDGE_GUARD = 0.06;
-
-const videoCoverSourceRect = (video) => {
-  const frameWidth = video.videoWidth || 640;
-  const frameHeight = video.videoHeight || 480;
-  const displayWidth = video.clientWidth || frameWidth;
-  const displayHeight = video.clientHeight || frameHeight;
-  const frameRatio = frameWidth / frameHeight;
-  const displayRatio = displayWidth / displayHeight;
-
-  if (displayRatio > frameRatio) {
-    const sourceHeight = frameWidth / displayRatio;
-    return {
-      x: 0,
-      y: Math.max(0, (frameHeight - sourceHeight) / 2),
-      width: frameWidth,
-      height: sourceHeight,
-    };
-  }
-
-  const sourceWidth = frameHeight * displayRatio;
-  return {
-    x: Math.max(0, (frameWidth - sourceWidth) / 2),
-    y: 0,
-    width: sourceWidth,
-    height: frameHeight,
-  };
-};
-
 const selectedZoneElement = (selectedZone) =>
   [...document.querySelectorAll("[data-zone-select]")]
     .find((button) => button.dataset.zoneSelect === selectedZone) || null;
@@ -914,26 +902,12 @@ const selectedZoneSourceRect = (video, selectedZone) => {
 
   const videoRect = video.getBoundingClientRect();
   const zoneRect = zoneElement.getBoundingClientRect();
-  if (!videoRect.width || !videoRect.height || !zoneRect.width || !zoneRect.height) return null;
-
-  const visibleSource = videoCoverSourceRect(video);
-  const left = Math.max(zoneRect.left, videoRect.left);
-  const top = Math.max(zoneRect.top, videoRect.top);
-  const right = Math.min(zoneRect.right, videoRect.right);
-  const bottom = Math.min(zoneRect.bottom, videoRect.bottom);
-  if (right <= left || bottom <= top) return null;
-
-  const scaleX = visibleSource.width / videoRect.width;
-  const scaleY = visibleSource.height / videoRect.height;
-  const guardX = (right - left) * AI_ZONE_EDGE_GUARD;
-  const guardY = (bottom - top) * AI_ZONE_EDGE_GUARD;
-
-  return {
-    x: visibleSource.x + ((left - videoRect.left + guardX) * scaleX),
-    y: visibleSource.y + ((top - videoRect.top + guardY) * scaleY),
-    width: Math.max(1, (right - left - (guardX * 2)) * scaleX),
-    height: Math.max(1, (bottom - top - (guardY * 2)) * scaleY),
-  };
+  return selectedZoneSourceRectFromRects({
+    frameWidth: video.videoWidth || 640,
+    frameHeight: video.videoHeight || 480,
+    videoRect,
+    zoneRect,
+  });
 };
 
 const frameToBlob = (video, selectedZone = null) =>
@@ -1024,6 +998,17 @@ const runLiveAiDetection = async () => {
       return;
     }
 
+    if (!detection.presenceDetected) {
+      await Swal.fire({
+        title: "No Item In Selected Zone",
+        text: `Place the rubbish fully inside the ${zoneCategory} sensor zone, then scan again. Items outside the selected zone are ignored.`,
+        icon: "warning",
+        confirmButtonColor: "#0b0b0d",
+      });
+      render();
+      return;
+    }
+
     if (detection.confidence < AI_MIN_DECISION_CONFIDENCE) {
       await Swal.fire({
         title: "Low Confidence",
@@ -1052,19 +1037,18 @@ const runLiveAiDetection = async () => {
       saveState();
       stopAiSensorCameras();
       const correct = detection.category === zoneCategory;
+      const resultSentence = correct
+        ? `${detection.category} was detected. It matches the ${zoneCategory} bin. You earned 1 point.`
+        : `${detection.category} was detected. It should be placed in the ${detection.category} bin, not the ${zoneCategory} bin. No point was added.`;
       collectAiTrainingSample({ blob, zoneCategory, detection, correct });
       await Swal.fire({
-        title: correct ? "Correct Disposal" : "Incorrect Disposal",
+        title: correct ? "Correct Disposal!" : "Wrong Bin Detected",
         html: `
           <div class="ai-result-modal">
-            <p><strong>Detected object:</strong> ${detection.label}</p>
-            <p><strong>Detected category:</strong> ${detection.category}</p>
-            <p><strong>Confidence:</strong> ${detection.confidence}%</p>
+            <p><strong>${resultSentence}</strong></p>
+            <p>The selected zone was ${zoneCategory}, using ${matchedStationBin.name}.</p>
+            <p>The camera detected ${detection.label} with ${detection.confidence}% confidence.</p>
             ${detection.rawConfidence !== detection.confidence ? `<p><strong>Raw model score:</strong> ${detection.rawConfidence}%</p>` : ""}
-            <p><strong>Placed zone:</strong> ${zoneCategory}</p>
-            <p><strong>Zone bin:</strong> ${matchedStationBin.name}</p>
-            <p><strong>Expected for zone:</strong> ${zoneCategory}</p>
-            <p><strong>Result:</strong> ${correct ? "Correct" : "False"}</p>
           </div>
         `,
         icon: correct ? "success" : "error",
@@ -2699,29 +2683,36 @@ const initThreeGame = () => {
   };
 };
 
-const stopScanner = async () => {
+const stopScanner = async ({ silent = false } = {}) => {
   const reader = document.querySelector("#qrReader");
   const launcher = document.querySelector("#scannerLaunch");
   const actionStack = document.querySelector(".scanner-action-stack");
   const actions = document.querySelector("#scannerActions");
 
-  if (!qrScanner) return;
+  const restoreScannerUi = () => {
+    reader?.classList.add("hidden");
+    launcher?.classList.remove("hidden");
+    actionStack?.classList.remove("hidden");
+    actions?.classList.add("hidden");
+  };
+
+  if (!qrScanner) {
+    qrScanBusy = false;
+    restoreScannerUi();
+    return;
+  }
 
   try {
     await qrScanner.stop();
     qrScanner.clear();
     qrScanner = null;
-    reader?.classList.add("hidden");
-    launcher?.classList.remove("hidden");
-    actionStack?.classList.remove("hidden");
-    actions?.classList.add("hidden");
-    showToast("QR scanner stopped.");
+    qrScanBusy = false;
+    restoreScannerUi();
+    if (!silent) showToast("QR scanner stopped.");
   } catch {
     qrScanner = null;
-    reader?.classList.add("hidden");
-    launcher?.classList.remove("hidden");
-    actionStack?.classList.remove("hidden");
-    actions?.classList.add("hidden");
+    qrScanBusy = false;
+    restoreScannerUi();
   }
 };
 
@@ -2743,15 +2734,23 @@ const startScanner = async () => {
   }
 
   if (qrScanner) await stopScanner();
+  qrScanBusy = false;
   reader.classList.remove("hidden");
   launcher?.classList.add("hidden");
   actionStack?.classList.add("hidden");
   actions?.classList.remove("hidden");
   qrScanner = new Html5Qrcode("qrReader");
   const onScanSuccess = async (decodedText) => {
+    if (qrScanBusy) return;
+    qrScanBusy = true;
     showToast("QR detected.");
-    await stopScanner();
-    handleQrScan(decodedText, { updateUrl: true });
+    await stopScanner({ silent: true });
+    const handled = handleQrScan(decodedText, { updateUrl: true });
+    if (!handled && state.page === "scan") {
+      window.setTimeout(() => {
+        void startScanner();
+      }, 450);
+    }
   };
   const scanConfig = {
     fps: 12,
@@ -2777,6 +2776,7 @@ const startScanner = async () => {
       await qrScanner.start({ facingMode: "user" }, scanConfig, onScanSuccess);
     } catch (error) {
       qrScanner = null;
+      qrScanBusy = false;
       reader.classList.add("hidden");
       launcher?.classList.remove("hidden");
       actionStack?.classList.remove("hidden");

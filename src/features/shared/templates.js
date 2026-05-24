@@ -510,7 +510,7 @@ export const renderBins = ({ guest = false, admin = false } = {}) => `
             </article>
           </aside>
         ` : ""}
-        ${filteredStations.map((station) => `
+        ${guest || admin ? filteredStations.map((station) => `
           <article class="card h-100 shadow-sm station-card scan-station-card">
             <div class="station-card-head">
               <div>
@@ -534,7 +534,7 @@ export const renderBins = ({ guest = false, admin = false } = {}) => `
               `).join("")}
             </div>
           </article>
-        `).join("")}
+        `).join("") : ""}
         ${!guest && !admin && filteredStations.length === 0 ? `
           <article class="card h-100 shadow-sm station-card scan-station-card">
             <p class="eyebrow">No Results</p>

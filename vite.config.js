@@ -38,6 +38,7 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return;
+            if (id.includes('@tensorflow')) return 'ai-vendor';
             if (id.includes('react')) return 'react-vendor';
             if (id.includes('bootstrap') || id.includes('sweetalert2')) return 'ui-vendor';
             if (id.includes('leaflet')) return 'map-vendor';

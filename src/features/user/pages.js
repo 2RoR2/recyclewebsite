@@ -1,5 +1,5 @@
 import { collectionLocation, gameItems, state, wasteGuide } from "../../backend/database.js";
-import { currentUser, selectedReward, userLearningRecords, userRecords, userRedeemed } from "../../backend/services.js";
+import { currentUser, selectedBin, selectedReward, userLearningRecords, userRecords, userRedeemed } from "../../backend/services.js";
 import { escapeHtml, recordsTable, renderContact, renderEducation, renderLocationPage, renderMapPage, renderScanPage, renderRewards, sectionTitle, stat } from "../shared/templates.js";
 
 const redeemedCard = (item) => `
@@ -32,17 +32,20 @@ const rewardImageSrc = (reward) => {
 const renderSelectWaste = () => `
   ${(() => {
     const activeZone = state.sensorCheck?.manualZone || "";
+    const bin = selectedBin();
     const zoneClass = (zone) => activeZone === zone ? "active" : "";
+    const detectionSummary = state.aiDetection && activeZone
+      ? `${escapeHtml(state.aiDetection.label)} - ${escapeHtml(state.aiDetection.category)} (${escapeHtml(state.sensorCheck?.zone || activeZone)})`
+      : "Select a zone and run camera AI detection.";
     return `
   <section class="page">
-    ${sectionTitle("Waste Detection", "Confirm location and prepare waste detection.")}
+    ${sectionTitle("Waste Detection", "Choose a bin zone, then start detect.")}
     <div class="panel card shadow-sm ai-scan-card">
       <div>
-        <p class="eyebrow">${state.locationCheck?.verified ? "Ready" : "GPS Required"}</p>
-        <h2>${state.locationCheck?.verified ? "Ready for camera detection" : "Verify GPS to continue"}</h2>
-        ${state.aiDetection ? `<p class="lead">${escapeHtml(state.aiDetection.label)} - ${state.aiDetection.confidence}% confidence (${escapeHtml(state.sensorCheck?.zone || "Unknown zone")})</p>` : ""}
+        <p class="eyebrow">Detected Bin</p>
+        <h2>${escapeHtml(bin?.name || "Selected smart bin")}</h2>
+        <p class="lead">${detectionSummary}</p>
       </div>
-      ${state.locationCheck?.verified ? `
         <div class="ai-zone-wrapper ${activeZone ? "has-selected-zone" : ""}">
           <video id="aiSensorFeed" class="ai-sensor-preview" autoplay muted playsinline></video>
           <div class="ai-zone-grid">
@@ -52,8 +55,11 @@ const renderSelectWaste = () => `
             <button type="button" class="ai-zone ${zoneClass("General Waste")}" data-zone-select="General Waste"><span>General Waste Bin Zone</span></button>
           </div>
         </div>
-        <button class="btn btn-success primary-btn" data-action="start-detection">Start Detection</button>
-      ` : `<button class="btn btn-success primary-btn" data-action="verify-location">Verify GPS & Start Detection</button>`}
+        <div class="simulation-panel">
+          <div class="simulation-actions">
+            <button class="btn btn-success primary-btn" type="button" data-action="${state.locationCheck?.verified ? "start-detection" : "verify-location"}">${state.locationCheck?.verified ? "Start Detection" : "Verify GPS & Start Detection"}</button>
+          </div>
+        </div>
     </div>
   </section>
 `;

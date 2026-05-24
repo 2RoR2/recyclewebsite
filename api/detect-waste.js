@@ -64,13 +64,18 @@ const heuristicDetection = ({ filename, mimeType }) => {
 const callOpenAI = async (imageDataUrl) => {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
+  if (process.env.OPENAI_ALLOW_INSECURE_TLS === "true" && process.env.VERCEL !== "1") {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  }
 
   const prompt = [
     "Classify the main waste item in this image for a recycling bin app.",
+    "The image is already cropped to the selected sensor zone. Ignore anything outside this image because it is not in the active zone.",
+    "If there is no clear waste item in this selected-zone crop, set presenceDetected to false, confidence to 0, label to no item, and category to General Waste.",
     "Use only the image content. Do not infer from the filename, selected bin zone, or surrounding UI.",
     "Books, notebooks, paper sheets, receipts, newspaper, cartons, and cardboard should be Paper unless badly contaminated.",
     "Return strict JSON only with keys:",
-    "label (short string), category (Paper|Plastic|Aluminium|General Waste), confidence (0-100 number).",
+    "label (short string), category (Paper|Plastic|Aluminium|General Waste), confidence (0-100 number), presenceDetected (boolean).",
     "If the item is contaminated, dirty, mixed-material, food waste, tissue, or non-recyclable rubbish, choose General Waste.",
   ].join(" ");
 
@@ -102,8 +107,9 @@ const callOpenAI = async (imageDataUrl) => {
               label: { type: "string" },
               category: { type: "string", enum: ["Paper", "Plastic", "Aluminium", "General Waste"] },
               confidence: { type: "number", minimum: 0, maximum: 100 },
+              presenceDetected: { type: "boolean" },
             },
-            required: ["label", "category", "confidence"],
+            required: ["label", "category", "confidence", "presenceDetected"],
           },
           strict: true,
         },
@@ -117,17 +123,18 @@ const callOpenAI = async (imageDataUrl) => {
   const payload = await response.json();
   const raw = payload?.output_text || payload?.output?.[0]?.content?.[0]?.text || "{}";
   const parsed = JSON.parse(raw);
+  const presenceDetected = parsed.presenceDetected === true;
   const confidence = Math.max(0, Math.min(100, Math.round(Number(parsed.confidence) || 0)));
 
   return {
-    label: String(parsed.label || "waste item"),
+    label: String(parsed.label || (presenceDetected ? "waste item" : "no item")),
     category: parsed.category,
-    confidence,
-    rawConfidence: confidence,
+    confidence: presenceDetected ? confidence : 0,
+    rawConfidence: presenceDetected ? confidence : 0,
     topPredictions: [],
     box: { x: 96, y: 72, width: 320, height: 320 },
     model: payload?.model || process.env.OPENAI_WASTE_MODEL || "OpenAI vision model",
-    presenceDetected: true,
+    presenceDetected,
     detectorAvailable: true,
   };
 };
