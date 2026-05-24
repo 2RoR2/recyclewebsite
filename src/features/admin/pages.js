@@ -285,7 +285,10 @@ const renderManageUsers = () => `
       <form class="inline-form crud-form" data-form="add-user">
         <input name="name" placeholder="Full name" required>
         <input name="email" type="email" placeholder="Email" required>
-        <input name="password" type="password" placeholder="Password" required>
+        <span class="password-control">
+          <input name="password" type="password" placeholder="Password" required>
+          <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" title="Show password"><span class="password-eye" aria-hidden="true"></span></button>
+        </span>
         <input name="location" placeholder="Location (optional)">
         <button class="btn btn-success primary-btn" type="submit">Add User</button>
       </form>
@@ -371,7 +374,10 @@ const renderManageUserDetail = () => {
           <input name="name" value="${escapeHtml(selectedUser.name)}" placeholder="Name">
           <input name="email" type="email" value="${escapeHtml(selectedUser.email)}" placeholder="Email">
           <input name="location" value="${escapeHtml(selectedUser.location || "")}" placeholder="Location">
-          <input name="password" type="password" placeholder="New password (optional)">
+          <span class="password-control">
+            <input name="password" type="password" placeholder="New password (optional)">
+            <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" title="Show password"><span class="password-eye" aria-hidden="true"></span></button>
+          </span>
           <button class="btn btn-success primary-btn" type="submit">Save User</button>
         </form>
       </section>

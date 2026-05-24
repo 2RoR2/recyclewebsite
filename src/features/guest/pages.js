@@ -446,7 +446,10 @@ const renderAuth = ({ embedded = false } = {}) => {
               <input name="email" type="email" autocomplete="email" placeholder="you@example.com" value="${escapeHtml(state.form.email)}">
             </label>
             <label>Password
-              <input name="password" type="password" autocomplete="${isLogin ? "current-password" : "new-password"}" ${isLogin ? "" : "minlength=\"8\" pattern=\"(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,}\""} placeholder="${isLogin ? "Enter your password" : "At least 8 characters"}" value="${escapeHtml(state.form.password)}">
+              <span class="password-control">
+                <input name="password" type="password" autocomplete="${isLogin ? "current-password" : "new-password"}" ${isLogin ? "" : "minlength=\"8\" pattern=\"(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,}\""} placeholder="${isLogin ? "Enter your password" : "At least 8 characters"}" value="${escapeHtml(state.form.password)}">
+                <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" title="Show password"><span class="password-eye" aria-hidden="true"></span></button>
+              </span>
             </label>
             <button class="btn btn-success primary-btn" type="submit">${isLogin ? "Login" : "Sign Up"}</button>
           </form>

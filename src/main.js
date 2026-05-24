@@ -698,6 +698,17 @@ const handleClick = (event) => {
   const target = event.target.closest("button");
   if (!target) return;
 
+  if (target.dataset.passwordToggle !== undefined) {
+    const input = target.closest(".password-control")?.querySelector("input");
+    if (!input) return;
+    const showing = input.type === "text";
+    input.type = showing ? "password" : "text";
+    target.classList.toggle("showing", !showing);
+    target.setAttribute("aria-label", showing ? "Show password" : "Hide password");
+    target.setAttribute("title", showing ? "Show password" : "Hide password");
+    return;
+  }
+
   handleNavigation(target);
   handleUserActions(target);
   handleAdminActions(target);

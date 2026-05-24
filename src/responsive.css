@@ -971,3 +971,353 @@ body {
     background: transparent !important;
   }
 }
+
+@media (max-width: 1024px) {
+  .site-nav .nav-links .main-menu .dropdown-menu,
+  .site-nav .nav-links .main-menu .dropdown-menu.show,
+  .nav-links .dropdown-menu,
+  .nav-links .dropdown-menu.show {
+    position: fixed !important;
+    isolation: isolate;
+    background: #06140d !important;
+    background-color: #07140e !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-menu::before,
+  .nav-links .dropdown-menu::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    background: url("https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExa3kyaWtvMjh0cXRpY2x5bHJyZndzb2lhdmljZWpsaTdqZDBpeWR6eCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Vzq3HO2Cid0CHSW2h6/giphy.gif") center / cover no-repeat;
+    opacity: 0.42;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-menu::after,
+  .nav-links .dropdown-menu::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(180deg, rgba(5, 19, 13, 0.62), rgba(5, 19, 13, 0.74));
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-item,
+  .nav-links .dropdown-item {
+    position: relative;
+    z-index: 1;
+    background: rgba(5, 19, 13, 0.68) !important;
+    color: #ffffff !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-item:hover,
+  .nav-links .dropdown-item:hover {
+    background: rgba(5, 19, 13, 0.82) !important;
+    color: #ffffff !important;
+  }
+
+  .site-nav .nav-links .main-menu .dropdown-item.active,
+  .nav-links .dropdown-item.active {
+    background: rgba(216, 245, 200, 0.9) !important;
+    color: #10251d !important;
+    text-shadow: none;
+  }
+}
+
+body[data-role="admin"] .section-title,
+body[data-role="admin"] .dashboard-header,
+body[data-role="admin"] .admin-bin-hero {
+  color: #ffffff !important;
+}
+
+body[data-role="admin"] .section-title h1,
+body[data-role="admin"] .dashboard-header h1,
+body[data-role="admin"] .admin-bin-hero h1 {
+  color: #ffffff !important;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+}
+
+body[data-role="admin"] .section-title .lead,
+body[data-role="admin"] .section-title p:not(.eyebrow),
+body[data-role="admin"] .dashboard-header p:not(.eyebrow),
+body[data-role="admin"] .admin-bin-hero .lead,
+body[data-role="admin"] .admin-bin-hero p:not(.eyebrow) {
+  color: rgba(255, 255, 255, 0.86) !important;
+}
+
+body[data-role="admin"] .section-title .eyebrow,
+body[data-role="admin"] .dashboard-header .eyebrow,
+body[data-role="admin"] .admin-bin-hero .eyebrow {
+  color: #d8f5c8 !important;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.34);
+}
+
+@media (max-width: 1024px) {
+  body[data-role="admin"] .site-nav {
+    min-height: 72px !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 0.55rem !important;
+    padding: 0.62rem 0.72rem !important;
+  }
+
+  body[data-role="admin"] .site-nav .nav-links {
+    order: 0 !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    margin: 0 !important;
+  }
+
+  body[data-role="admin"] .site-nav .brand {
+    order: 1 !important;
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+  }
+
+  body[data-role="admin"] .site-nav .brand span {
+    max-width: min(42vw, 240px) !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  body[data-role="admin"] .site-nav .brand img {
+    width: 34px !important;
+    height: 34px !important;
+  }
+
+  body[data-role="admin"] .site-nav .nav-actions {
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    margin-left: auto !important;
+    display: inline-flex !important;
+    flex-wrap: nowrap !important;
+    gap: 0.35rem !important;
+  }
+
+  body[data-role="admin"] .site-nav .nav-menu-toggle,
+  body[data-role="admin"] .site-nav .install-nav-btn,
+  body[data-role="admin"] .site-nav .account-chip {
+    min-width: 42px !important;
+    width: 42px !important;
+    min-height: 42px !important;
+    height: 42px !important;
+    padding: 0 !important;
+  }
+
+  body[data-role="admin"] .site-nav .nav-links .main-menu .dropdown-menu {
+    inset: calc(72px + env(safe-area-inset-top)) 0 0 0 !important;
+    height: calc(100svh - 72px - env(safe-area-inset-top)) !important;
+  }
+
+  body[data-role="admin"] .page {
+    padding-top: calc(72px + 1rem) !important;
+  }
+
+  body[data-role="admin"] .section-title,
+  body[data-role="admin"] .dashboard-header,
+  body[data-role="admin"] .admin-bin-hero {
+    min-height: 0 !important;
+    padding: clamp(1.1rem, 4vw, 1.75rem) !important;
+    overflow: hidden;
+  }
+
+  body[data-role="admin"] .report-page .grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.75rem !important;
+  }
+
+  body[data-role="admin"] .report-page .stat {
+    min-height: 104px;
+    padding: 1rem;
+  }
+
+  body[data-role="admin"] .report-page .stat strong {
+    overflow-wrap: anywhere;
+    font-size: clamp(1.65rem, 9vw, 2.45rem);
+  }
+
+  body[data-role="admin"] .report-page .panel,
+  body[data-role="admin"] .report-page .card,
+  body[data-role="admin"] .report-page .table-wrap {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  body[data-role="admin"] .site-nav .brand span {
+    max-width: 34vw !important;
+  }
+
+  body[data-role="admin"] .report-page .grid-4 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media print {
+  body[data-role="admin"] .site-nav,
+  body[data-role="admin"] .toast,
+  body[data-role="admin"] .back-to-top,
+  body[data-role="admin"] .install-prompt,
+  body[data-role="admin"] .no-print {
+    display: none !important;
+  }
+
+  body[data-role="admin"],
+  body[data-role="admin"] #app,
+  body[data-role="admin"] .page.report-page {
+    background: #ffffff !important;
+    color: #111714 !important;
+  }
+
+  body[data-role="admin"] .page.report-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  body[data-role="admin"] .report-page .section-title {
+    min-height: 0 !important;
+    margin: 0 0 0.45rem !important;
+    padding: 0.55rem 0.65rem !important;
+    border-radius: 0 !important;
+  }
+
+  body[data-role="admin"] .report-page .section-title::after,
+  body[data-role="admin"] .report-page .section-title::before {
+    display: none !important;
+  }
+
+  body[data-role="admin"] .report-page .section-title,
+  body[data-role="admin"] .report-page .panel,
+  body[data-role="admin"] .report-page .card,
+  body[data-role="admin"] .report-page .stat,
+  body[data-role="admin"] .report-page .table-wrap {
+    background: #ffffff !important;
+    color: #111714 !important;
+    box-shadow: none !important;
+    border: 1px solid #cfd8d3 !important;
+  }
+
+  body[data-role="admin"] .report-page .section-title h1,
+  body[data-role="admin"] .report-page .section-title p,
+  body[data-role="admin"] .report-page h2,
+  body[data-role="admin"] .report-page h3,
+  body[data-role="admin"] .report-page p,
+  body[data-role="admin"] .report-page span,
+  body[data-role="admin"] .report-page strong,
+  body[data-role="admin"] .report-page th,
+  body[data-role="admin"] .report-page td {
+    color: #111714 !important;
+    text-shadow: none !important;
+  }
+
+  body[data-role="admin"] .report-page .grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 0.4rem !important;
+    margin: 0 0 0.45rem !important;
+  }
+
+  body[data-role="admin"] .report-page .stat {
+    min-height: 0 !important;
+    padding: 0.65rem !important;
+    break-inside: avoid;
+  }
+
+  body[data-role="admin"] .report-page .stat p {
+    margin: 0 0 0.25rem !important;
+    font-size: 0.72rem !important;
+    line-height: 1.15 !important;
+  }
+
+  body[data-role="admin"] .report-page .stat strong {
+    font-size: 1.25rem !important;
+    line-height: 1.1 !important;
+  }
+
+  body[data-role="admin"] .report-page .panel {
+    margin: 0 0 0.45rem !important;
+    padding: 0.65rem !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body[data-role="admin"] .report-page .panel-head {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.45rem !important;
+    padding-bottom: 0.35rem !important;
+    margin-bottom: 0.35rem !important;
+  }
+
+  body[data-role="admin"] .report-page .panel-head h2,
+  body[data-role="admin"] .report-page h2 {
+    margin: 0 !important;
+    font-size: 1rem !important;
+    line-height: 1.15 !important;
+  }
+
+  body[data-role="admin"] .report-page .badge {
+    padding: 0.18rem 0.4rem !important;
+    border-radius: 999px !important;
+    background: #ffffff !important;
+    font-size: 0.62rem !important;
+    white-space: nowrap !important;
+  }
+
+  body[data-role="admin"] .report-page .table-wrap {
+    padding: 0 !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+  }
+
+  body[data-role="admin"] .report-page table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+  }
+
+  body[data-role="admin"] .report-page thead,
+  body[data-role="admin"] .report-page tbody,
+  body[data-role="admin"] .report-page tr {
+    width: 100% !important;
+  }
+
+  body[data-role="admin"] .report-page th,
+  body[data-role="admin"] .report-page td {
+    border: 1px solid #cfd8d3 !important;
+    background: #ffffff !important;
+    padding: 0.28rem 0.32rem !important;
+    font-size: 0.56rem !important;
+    line-height: 1.2 !important;
+    vertical-align: top !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+  }
+
+  body[data-role="admin"] .report-page th {
+    background: #f4f8f1 !important;
+    font-weight: 900 !important;
+    text-transform: uppercase;
+  }
+
+  body[data-role="admin"] .report-page td[colspan] {
+    text-align: center;
+    font-weight: 800;
+  }
+
+  body[data-role="admin"] .report-page #reportChart {
+    max-height: 140px !important;
+  }
+}

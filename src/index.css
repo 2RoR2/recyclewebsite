@@ -36,6 +36,68 @@ textarea {
   font: inherit;
 }
 
+.password-control {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.password-control input {
+  width: 100%;
+  padding-right: 3.1rem !important;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  width: 2rem;
+  height: 2rem;
+  min-height: 0;
+  min-width: 0;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #10251d;
+  padding: 0;
+  line-height: 1;
+  appearance: none;
+  box-shadow: none;
+  text-transform: none;
+}
+
+.password-toggle:hover,
+.password-toggle.showing {
+  background: transparent;
+  color: #0f6a34;
+}
+
+.password-eye {
+  position: relative;
+  width: 1.28rem;
+  height: 0.82rem;
+  display: block;
+  transform: rotate(45deg);
+  border: 2px solid currentColor;
+  border-radius: 80% 20% 80% 20% / 80% 20% 80% 20%;
+}
+
+.password-eye::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.3rem;
+  height: 0.3rem;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  background: transparent;
+  transform: translate(-50%, -50%);
+}
+
 button {
   cursor: pointer;
 }
@@ -1385,6 +1447,13 @@ select {
   align-items: center;
   justify-content: center;
   width: 100%;
+}
+
+.scanner-actions.hidden,
+.qr-reader.hidden,
+.scanner-action-stack.hidden,
+.scanner-launch.hidden {
+  display: none !important;
 }
 
 .scanner-card {
@@ -3470,12 +3539,12 @@ th {
   }
 
   .guide-flipbook-stage {
-    aspect-ratio: 3 / 2;
-    min-height: 0;
+    aspect-ratio: auto;
+    min-height: 420px;
   }
 
   .guide-flip-page {
-    padding: 1rem;
+    padding: 1.25rem clamp(1.1rem, 4vw, 1.75rem);
   }
 
   .guide-cover-page {
@@ -3483,7 +3552,8 @@ th {
   }
 
   .guide-flip-controls {
-    inset: 0;
+    inset: auto 0 -3.4rem;
+    height: 42px;
   }
 
   .guide-flip-controls button {
@@ -3492,11 +3562,38 @@ th {
   }
 
   .guide-flip-controls button[data-guide-flip="prev"] {
-    left: -0.75rem;
+    left: calc(50% - 4.2rem);
   }
 
   .guide-flip-controls button[data-guide-flip="next"] {
-    right: -0.75rem;
+    right: calc(50% - 4.2rem);
+  }
+
+  .guide-index-page {
+    align-content: start;
+    overflow: visible;
+  }
+
+  .guide-index-page h2 {
+    font-size: clamp(2rem, 9vw, 3.2rem);
+  }
+
+  .guide-book-index {
+    width: 100%;
+    margin-top: 1rem;
+  }
+
+  .guide-book-index span {
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 0.75rem;
+    min-height: 66px;
+    padding: 0.65rem 0;
+    font-size: clamp(1.05rem, 5vw, 1.45rem);
+    line-height: 1.05;
+  }
+
+  .guide-book-index strong {
+    font-size: clamp(1.35rem, 6vw, 1.8rem);
   }
 }
 
@@ -12274,6 +12371,29 @@ body[data-role="user"] .scan-steps {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+@media (max-width: 1024px) {
+  .site-nav .nav-links .main-menu .dropdown-menu {
+    background:
+      linear-gradient(180deg, rgba(5, 19, 13, 0.72), rgba(5, 19, 13, 0.86)),
+      url("https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExa3kyaWtvMjh0cXRpY2x5bHJyZndzb2lhdmljZWpsaTdqZDBpeWR6eCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Vzq3HO2Cid0CHSW2h6/giphy.gif") center / cover no-repeat !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  body[data-role="user"][data-page="scan"] .scan-map-panel,
+  body[data-role="user"][data-page="scan"] .bento-side-panel {
+    display: none !important;
+  }
+
+  body[data-role="user"][data-page="scan"] .scan-page-shell {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body[data-role="user"][data-page="scan"] .scan-control-card {
+    grid-column: 1 / -1 !important;
+  }
+}
+
 body[data-role="user"] .scan-steps span,
 body[data-role="user"] .qr-helper-row span {
   border: 1px solid rgba(15, 106, 52, 0.12);
@@ -15273,6 +15393,48 @@ body[data-role="admin"] .profile-settings-page {
     transparent;
 }
 
+body[data-role="admin"] .section-title,
+body[data-role="admin"] .dashboard-header,
+body[data-role="admin"] .admin-bin-hero {
+  color: #ffffff !important;
+}
+
+body[data-role="admin"] .section-title h1,
+body[data-role="admin"] .dashboard-header h1,
+body[data-role="admin"] .admin-bin-hero h1 {
+  color: #ffffff !important;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+}
+
+body[data-role="admin"] .section-title .lead,
+body[data-role="admin"] .section-title p:not(.eyebrow),
+body[data-role="admin"] .dashboard-header p:not(.eyebrow),
+body[data-role="admin"] .admin-bin-hero .lead,
+body[data-role="admin"] .admin-bin-hero p:not(.eyebrow) {
+  color: rgba(255, 255, 255, 0.86) !important;
+}
+
+body[data-role="admin"] .section-title .eyebrow,
+body[data-role="admin"] .dashboard-header .eyebrow,
+body[data-role="admin"] .admin-bin-hero .eyebrow {
+  color: #d8f5c8 !important;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.34);
+}
+
+body[data-role="admin"] .card h1,
+body[data-role="admin"] .card h2,
+body[data-role="admin"] .card h3,
+body[data-role="admin"] .panel h1,
+body[data-role="admin"] .panel h2,
+body[data-role="admin"] .panel h3,
+body[data-role="admin"] .table-wrap td,
+body[data-role="admin"] .table-wrap th,
+body[data-role="admin"] .admin-bin-row summary,
+body[data-role="admin"] .admin-bin-row summary span,
+body[data-role="admin"] .admin-bin-row summary b {
+  opacity: 1;
+}
+
 @media (max-width: 1100px) {
   body[data-role="admin"] .dashboard-header,
   body[data-role="admin"] .dashboard-layout,
@@ -15329,4 +15491,38 @@ body[data-role="admin"] .profile-settings-page {
   body[data-role="admin"] .crud-actions .btn {
     width: 100%;
   }
+}
+
+.password-control .password-toggle,
+body[data-role="user"] .card .password-control .password-toggle,
+body[data-role="user"] .panel .password-control .password-toggle,
+body[data-role="admin"] .card .password-control .password-toggle,
+body[data-role="admin"] .panel .password-control .password-toggle,
+body[data-role="user"] .card button.password-toggle,
+body[data-role="admin"] .card button.password-toggle,
+body[data-role="admin"] .panel button.password-toggle {
+  position: absolute !important;
+  top: 50% !important;
+  right: 0.75rem !important;
+  width: 2rem !important;
+  height: 2rem !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  transform: translateY(-50%) !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #10251d !important;
+  line-height: 1 !important;
+}
+
+.password-control .password-toggle:hover,
+.password-control .password-toggle.showing,
+body[data-role="user"] .card button.password-toggle:hover,
+body[data-role="admin"] .card button.password-toggle:hover,
+body[data-role="admin"] .panel button.password-toggle:hover {
+  background: transparent !important;
+  color: #0f6a34 !important;
 }

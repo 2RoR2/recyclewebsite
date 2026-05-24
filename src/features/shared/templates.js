@@ -140,7 +140,7 @@ export const renderEducation = (wasteGuide) => `
         <span aria-hidden="true"></span>
       </div>
       <div class="learn-photo-board">
-        <img class="learn-photo-main" src="/images/user/image2.jpg" alt="Sustainability collage with earth, forest, and recycling symbol">
+        <img class="learn-photo-main" src="/images/user/image-2.jpg" alt="Sustainability collage with earth, forest, and recycling symbol">
         <div class="learn-photo-row">
           <img src="/images/resources/resources1.png" alt="Community recycling reference">
           <div class="learn-symbol-tile" aria-hidden="true">♻</div>
@@ -331,9 +331,7 @@ export const renderMapPage = () => {
 `;
 };
 
-export const renderScanPage = () => {
-  const stations = binStations();
-  return `
+export const renderScanPage = () => `
   <section class="page scan-page">
     <article class="card h-100 shadow-sm scan-control-card">
       <div class="scanner-copy">
@@ -368,20 +366,9 @@ export const renderScanPage = () => {
           <span aria-hidden="true">x</span>
         </button>
       </div>
-      <div class="station-mini-list">
-        ${stations.map((station, index) => `
-          <button type="button" data-scan="${escapeHtml(station.code)}">
-            <span>${index + 1}</span>
-            <strong>${escapeHtml(station.name)}</strong>
-            <small>${escapeHtml(station.location)}</small>
-            <b>${station.bins.some((bin) => bin.status !== "Available") ? "Check" : "Available"}</b>
-          </button>
-        `).join("")}
-      </div>
     </article>
   </section>
 `;
-};
 
 export const renderBins = ({ guest = false, admin = false } = {}) => `
   ${(() => {
@@ -389,7 +376,6 @@ export const renderBins = ({ guest = false, admin = false } = {}) => `
       `https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`;
     const filteredStations = binStations();
     const featuredStation = filteredStations[0];
-    const stationList = filteredStations.slice(0, 4);
     return `
   <section class="page">
     ${sectionTitle(guest ? "Public Bin Location" : admin ? "Bin Status" : "Scan QR Page", guest ? "Each location has Paper, Plastic, Aluminium, and General Waste smart bins." : "Scan the QR code. EcoCycle will automatically use your current GPS location before AI detection.")}
@@ -436,19 +422,6 @@ export const renderBins = ({ guest = false, admin = false } = {}) => `
             <span><b class="busy-dot"></b>Check status</span>
             <span><b class="gps-dot"></b>Your GPS</span>
           </div>
-          ${!guest && !admin ? `
-            <div class="station-mini-list">
-              ${stationList.map((station, index) => `
-                <button data-scan="${escapeHtml(station.code)}">
-                  <span>${index + 1}</span>
-                  <strong>${escapeHtml(station.name)}</strong>
-                  <small>${(index + 1) * 1.6} km</small>
-                  <b>${station.bins.some((bin) => bin.status !== "Available") ? "Check" : "Available"}</b>
-                </button>
-              `).join("")}
-            </div>
-            <button class="view-stations-btn" data-page="locations">View All Stations</button>
-          ` : ""}
         </div>
         ${!guest && !admin ? `
           <div class="scan-status-strip">

@@ -422,7 +422,12 @@ const renderProfile = () => {
                 <label class="profile-field">Email<input name="email" type="email" value="${escapeHtml(user.email)}"></label>
                 <label class="profile-field">Phone<input name="phone" value="${escapeHtml(user.phone)}" placeholder="Optional phone number"></label>
                 <label class="profile-field">${locationLabel}<input name="location" value="${escapeHtml(user.location)}"></label>
-                <label class="profile-field full">New password<input name="password" type="password" placeholder="Leave blank to keep current password"></label>
+                <label class="profile-field full">New password
+                  <span class="password-control">
+                    <input name="password" type="password" placeholder="Leave blank to keep current password">
+                    <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" title="Show password"><span class="password-eye" aria-hidden="true"></span></button>
+                  </span>
+                </label>
               </div>
               <button class="btn btn-success primary-btn profile-save-btn" type="submit">Save Changes</button>
             </form>

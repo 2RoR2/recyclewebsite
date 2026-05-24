@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v11";
+const CACHE_VERSION = "v12";
 const CACHE_NAME = `ecocycle-shell-${CACHE_VERSION}`;
 const APP_SHELL = [
   "/",
@@ -65,6 +65,10 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) return;
   if (url.pathname.startsWith("/ai-model/")) {
     event.respondWith(fetch(request, { cache: "no-store" }));
+    return;
+  }
+  if (url.pathname.startsWith("/images/user/")) {
+    event.respondWith(fetch(request, { cache: "reload" }));
     return;
   }
 
