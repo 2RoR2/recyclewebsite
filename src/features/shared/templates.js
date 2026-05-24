@@ -630,7 +630,7 @@ export const renderNotFound = () => `
       <h1>Page Not Found</h1>
       <p class="lead">The page you opened does not exist in EcoCycle Sarawak. Return home or login again to continue.</p>
       <div class="row">
-        <button class="btn btn-success primary-btn" data-page="home">Home</button>
+        <button class="btn btn-success primary-btn" data-anchor="home">Home</button>
         <button class="btn btn-outline-success ghost-btn" data-auth="login">Login</button>
       </div>
     </div>

@@ -2092,8 +2092,10 @@ textarea {
   z-index: 0;
   display: block;
   width: 100%;
-  min-height: 280px;
+  height: 100%;
+  min-height: 320px;
   max-height: 520px;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -2105,6 +2107,9 @@ textarea {
   width: 100%;
   overflow: hidden;
   border-radius: 8px;
+  aspect-ratio: 16 / 9;
+  min-height: 320px;
+  max-height: 520px;
 }
 
 .ai-zone-grid {
@@ -4484,6 +4489,11 @@ th {
   }
 
   .ai-sensor-preview {
+    min-height: 240px;
+    max-height: 360px;
+  }
+
+  .ai-zone-wrapper {
     min-height: 240px;
     max-height: 360px;
   }
@@ -14622,10 +14632,11 @@ body[data-role="admin"] .dashboard-records-panel table {
 
 .admin-bin-edit-form {
   display: grid;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr));
   gap: 0.75rem;
   align-items: end;
   margin-top: 0.8rem;
+  min-width: 0;
 }
 
 .admin-bin-edit-form label {
@@ -14635,11 +14646,13 @@ body[data-role="admin"] .dashboard-records-panel table {
   font-size: 0.78rem;
   font-weight: 950;
   text-transform: uppercase;
+  min-width: 0;
 }
 
 .admin-bin-edit-form input,
 .admin-bin-edit-form select {
   width: 100%;
+  min-width: 0;
   min-height: 42px;
   border-radius: 12px;
   border-color: rgba(15, 90, 32, 0.2);
@@ -14649,7 +14662,8 @@ body[data-role="admin"] .dashboard-records-panel table {
 .admin-bin-form-actions {
   display: flex;
   gap: 0.5rem;
-  grid-column: span 2;
+  grid-column: 1 / -1;
+  min-width: 0;
 }
 
 .admin-bin-form-actions .btn {
@@ -14661,7 +14675,8 @@ body[data-role="admin"] .dashboard-records-panel table {
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.65rem;
   align-items: center;
-  grid-column: span 2;
+  grid-column: 1 / -1;
+  min-width: 0;
   min-height: 78px;
   border: 1px dashed rgba(15, 90, 32, 0.18);
   border-radius: 14px;
@@ -15142,7 +15157,7 @@ body[data-role="admin"] .admin-bin-create {
 }
 
 body[data-role="admin"] .admin-bin-edit-form {
-  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr));
 }
 
 body[data-role="admin"] .admin-bin-row summary {

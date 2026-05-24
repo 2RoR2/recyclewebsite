@@ -822,12 +822,17 @@ const localYoloFallback = (file) => {
     box: { x: 128, y: 84, width: 260, height: 260 },
     model: "Browser heuristic fallback",
     presenceDetected: true,
-    detectorAvailable: true,
+    detectorAvailable: false,
   };
 };
 
 const AI_MIN_DECISION_CONFIDENCE = 70;
 const AI_TRAINING_CONFIDENCE = 70;
+
+const configuredAiApiBaseUrl = (import.meta.env.VITE_AI_API_BASE_URL || "").replace(/\/+$/, "");
+const isLocalHost = () => ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const localAiApiBaseUrl = "http://127.0.0.1:8000";
+const aiApiBaseUrl = () => configuredAiApiBaseUrl || (isLocalHost() ? localAiApiBaseUrl : "");
 
 const normalizeAiDetection = (result) => {
   const confidence = Math.max(0, Math.min(100, Math.round(Number(result?.confidence) || 0)));
@@ -845,14 +850,14 @@ const detectWasteWithAi = async (file) => {
   const formData = new FormData();
   formData.append("image", file);
 
-  const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+  const externalAiApiBaseUrl = aiApiBaseUrl();
 
-  if (isLocal) {
+  if (externalAiApiBaseUrl) {
     try {
-      const response = await fetch("http://127.0.0.1:8000/detect-waste", { method: "POST", body: formData });
-      if (!response.ok) throw new Error("Local AI detector unavailable");
+      const response = await fetch(`${externalAiApiBaseUrl}/detect-waste`, { method: "POST", body: formData });
+      if (!response.ok) throw new Error("AI detector unavailable");
       const result = await response.json();
-      if (!result?.category || !result?.label) throw new Error("Invalid local AI detector result");
+      if (!result?.category || !result?.label) throw new Error("Invalid AI detector result");
       return normalizeAiDetection(result);
     } catch {
       // Continue to Vercel API fallback.
@@ -871,6 +876,34 @@ const detectWasteWithAi = async (file) => {
 };
 
 const aiZoneOrder = ["Paper", "Plastic", "Aluminium", "General Waste"];
+const AI_ZONE_EDGE_GUARD = 0.06;
+
+const videoCoverSourceRect = (video) => {
+  const frameWidth = video.videoWidth || 640;
+  const frameHeight = video.videoHeight || 480;
+  const displayWidth = video.clientWidth || frameWidth;
+  const displayHeight = video.clientHeight || frameHeight;
+  const frameRatio = frameWidth / frameHeight;
+  const displayRatio = displayWidth / displayHeight;
+
+  if (displayRatio > frameRatio) {
+    const sourceHeight = frameWidth / displayRatio;
+    return {
+      x: 0,
+      y: Math.max(0, (frameHeight - sourceHeight) / 2),
+      width: frameWidth,
+      height: sourceHeight,
+    };
+  }
+
+  const sourceWidth = frameHeight * displayRatio;
+  return {
+    x: Math.max(0, (frameWidth - sourceWidth) / 2),
+    y: 0,
+    width: sourceWidth,
+    height: frameHeight,
+  };
+};
 
 const frameToBlob = (video, selectedZone = null) =>
   new Promise((resolve) => {
@@ -878,14 +911,22 @@ const frameToBlob = (video, selectedZone = null) =>
     const frameWidth = video.videoWidth || 640;
     const frameHeight = video.videoHeight || 480;
     const zoneIndex = aiZoneOrder.indexOf(selectedZone);
-    const zoneWidth = frameWidth / aiZoneOrder.length;
-    const sourceX = zoneIndex >= 0 ? Math.round(zoneIndex * zoneWidth) : 0;
-    const sourceWidth = zoneIndex >= 0 ? Math.round(zoneWidth) : frameWidth;
+    const visibleSource = videoCoverSourceRect(video);
+    const zoneWidth = visibleSource.width / aiZoneOrder.length;
+    const edgeGuard = zoneIndex >= 0 ? zoneWidth * AI_ZONE_EDGE_GUARD : 0;
+    const sourceX = zoneIndex >= 0
+      ? Math.round(visibleSource.x + (zoneIndex * zoneWidth) + edgeGuard)
+      : 0;
+    const sourceY = zoneIndex >= 0 ? Math.round(visibleSource.y) : 0;
+    const sourceWidth = zoneIndex >= 0
+      ? Math.round(Math.max(1, zoneWidth - (edgeGuard * 2)))
+      : frameWidth;
+    const sourceHeight = zoneIndex >= 0 ? Math.round(visibleSource.height) : frameHeight;
 
     canvas.width = sourceWidth;
-    canvas.height = frameHeight;
+    canvas.height = sourceHeight;
     const context = canvas.getContext("2d");
-    context.drawImage(video, sourceX, 0, sourceWidth, frameHeight, 0, 0, canvas.width, canvas.height);
+    context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
     canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.86);
   });
 
@@ -901,10 +942,13 @@ const collectAiTrainingSample = async ({ blob, zoneCategory, detection, correct 
   formData.append("zone", zoneCategory);
   formData.append("use_for_training", String(correct && detection.confidence >= AI_TRAINING_CONFIDENCE));
 
+  const externalAiApiBaseUrl = aiApiBaseUrl();
+  if (!externalAiApiBaseUrl) return;
+
   try {
-    await fetch("http://127.0.0.1:8000/collect-sample", { method: "POST", body: formData });
+    await fetch(`${externalAiApiBaseUrl}/collect-sample`, { method: "POST", body: formData });
   } catch {
-    // Sample collection is optional and only runs when the local AI service is available.
+    // Sample collection is optional and only runs when an AI training service is available.
   }
 };
 
