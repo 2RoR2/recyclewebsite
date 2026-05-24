@@ -332,6 +332,7 @@ export const renderMapPage = () => {
 };
 
 export const renderScanPage = () => {
+  const stations = binStations();
   return `
   <section class="page scan-page">
     <article class="card h-100 shadow-sm scan-control-card">
@@ -366,6 +367,16 @@ export const renderScanPage = () => {
         <button class="icon-btn scanner-icon stop" data-action="stop-scanner" aria-label="Stop QR scanner" title="Stop QR scanner">
           <span aria-hidden="true">x</span>
         </button>
+      </div>
+      <div class="station-mini-list">
+        ${stations.map((station, index) => `
+          <button type="button" data-scan="${escapeHtml(station.code)}">
+            <span>${index + 1}</span>
+            <strong>${escapeHtml(station.name)}</strong>
+            <small>${escapeHtml(station.location)}</small>
+            <b>${station.bins.some((bin) => bin.status !== "Available") ? "Check" : "Available"}</b>
+          </button>
+        `).join("")}
       </div>
     </article>
   </section>

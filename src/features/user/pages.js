@@ -1,5 +1,5 @@
 import { collectionLocation, gameItems, state, wasteGuide } from "../../backend/database.js";
-import { currentUser, selectedBin, selectedReward, userLearningRecords, userRecords, userRedeemed } from "../../backend/services.js";
+import { currentUser, selectedReward, userLearningRecords, userRecords, userRedeemed } from "../../backend/services.js";
 import { escapeHtml, recordsTable, renderContact, renderEducation, renderLocationPage, renderMapPage, renderScanPage, renderRewards, sectionTitle, stat } from "../shared/templates.js";
 
 const redeemedCard = (item) => `

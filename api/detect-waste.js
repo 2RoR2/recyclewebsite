@@ -44,28 +44,19 @@ const parseMultipartImage = (body, contentType = "") => {
   return null;
 };
 
-const inferWasteFromName = (filename = "") => {
-  const text = filename.toLowerCase();
-  if (/paper|cardboard|box|newspaper|receipt|book|carton/.test(text)) return ["paper item", "Paper"];
-  if (/plastic|bottle|bag|wrapper|cup|straw/.test(text)) return ["plastic item", "Plastic"];
-  if (/aluminium|aluminum|can|tin|metal/.test(text)) return ["aluminium can", "Aluminium"];
-  if (/food|tissue|dirty|mixed|waste|trash|rubbish/.test(text)) return ["general waste item", "General Waste"];
-  return ["waste item", "General Waste"];
-};
-
 const heuristicDetection = ({ filename, mimeType }) => {
-  const [label, category] = inferWasteFromName(filename);
   return {
-    label,
-    category,
-    confidence: 70,
-    rawConfidence: 70,
+    label: "AI detector unavailable",
+    category: "General Waste",
+    confidence: 0,
+    rawConfidence: 0,
     topPredictions: [],
     box: { x: 96, y: 72, width: 320, height: 320 },
     model: "Hosted heuristic fallback",
     presenceDetected: true,
-    detectorAvailable: true,
-    note: "Set OPENAI_API_KEY in Vercel for image-based AI classification. This fallback keeps scanning available when no hosted AI key is configured.",
+    detectorAvailable: false,
+    note: "Set OPENAI_API_KEY in Vercel or VITE_AI_API_BASE_URL for image-based AI classification. Filename heuristics are disabled because they can confuse the selected bin zone with the detected item.",
+    filename,
     mimeType,
   };
 };
@@ -76,6 +67,8 @@ const callOpenAI = async (imageDataUrl) => {
 
   const prompt = [
     "Classify the main waste item in this image for a recycling bin app.",
+    "Use only the image content. Do not infer from the filename, selected bin zone, or surrounding UI.",
+    "Books, notebooks, paper sheets, receipts, newspaper, cartons, and cardboard should be Paper unless badly contaminated.",
     "Return strict JSON only with keys:",
     "label (short string), category (Paper|Plastic|Aluminium|General Waste), confidence (0-100 number).",
     "If the item is contaminated, dirty, mixed-material, food waste, tissue, or non-recyclable rubbish, choose General Waste.",

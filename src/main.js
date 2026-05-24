@@ -875,7 +875,6 @@ const detectWasteWithAi = async (file) => {
   }
 };
 
-const aiZoneOrder = ["Paper", "Plastic", "Aluminium", "General Waste"];
 const AI_ZONE_EDGE_GUARD = 0.06;
 
 const videoCoverSourceRect = (video) => {
@@ -905,23 +904,48 @@ const videoCoverSourceRect = (video) => {
   };
 };
 
+const selectedZoneElement = (selectedZone) =>
+  [...document.querySelectorAll("[data-zone-select]")]
+    .find((button) => button.dataset.zoneSelect === selectedZone) || null;
+
+const selectedZoneSourceRect = (video, selectedZone) => {
+  const zoneElement = selectedZoneElement(selectedZone);
+  if (!zoneElement) return null;
+
+  const videoRect = video.getBoundingClientRect();
+  const zoneRect = zoneElement.getBoundingClientRect();
+  if (!videoRect.width || !videoRect.height || !zoneRect.width || !zoneRect.height) return null;
+
+  const visibleSource = videoCoverSourceRect(video);
+  const left = Math.max(zoneRect.left, videoRect.left);
+  const top = Math.max(zoneRect.top, videoRect.top);
+  const right = Math.min(zoneRect.right, videoRect.right);
+  const bottom = Math.min(zoneRect.bottom, videoRect.bottom);
+  if (right <= left || bottom <= top) return null;
+
+  const scaleX = visibleSource.width / videoRect.width;
+  const scaleY = visibleSource.height / videoRect.height;
+  const guardX = (right - left) * AI_ZONE_EDGE_GUARD;
+  const guardY = (bottom - top) * AI_ZONE_EDGE_GUARD;
+
+  return {
+    x: visibleSource.x + ((left - videoRect.left + guardX) * scaleX),
+    y: visibleSource.y + ((top - videoRect.top + guardY) * scaleY),
+    width: Math.max(1, (right - left - (guardX * 2)) * scaleX),
+    height: Math.max(1, (bottom - top - (guardY * 2)) * scaleY),
+  };
+};
+
 const frameToBlob = (video, selectedZone = null) =>
   new Promise((resolve) => {
     const canvas = document.createElement("canvas");
     const frameWidth = video.videoWidth || 640;
     const frameHeight = video.videoHeight || 480;
-    const zoneIndex = aiZoneOrder.indexOf(selectedZone);
-    const visibleSource = videoCoverSourceRect(video);
-    const zoneWidth = visibleSource.width / aiZoneOrder.length;
-    const edgeGuard = zoneIndex >= 0 ? zoneWidth * AI_ZONE_EDGE_GUARD : 0;
-    const sourceX = zoneIndex >= 0
-      ? Math.round(visibleSource.x + (zoneIndex * zoneWidth) + edgeGuard)
-      : 0;
-    const sourceY = zoneIndex >= 0 ? Math.round(visibleSource.y) : 0;
-    const sourceWidth = zoneIndex >= 0
-      ? Math.round(Math.max(1, zoneWidth - (edgeGuard * 2)))
-      : frameWidth;
-    const sourceHeight = zoneIndex >= 0 ? Math.round(visibleSource.height) : frameHeight;
+    const selectedSource = selectedZoneSourceRect(video, selectedZone);
+    const sourceX = selectedSource ? Math.round(selectedSource.x) : 0;
+    const sourceY = selectedSource ? Math.round(selectedSource.y) : 0;
+    const sourceWidth = selectedSource ? Math.round(selectedSource.width) : frameWidth;
+    const sourceHeight = selectedSource ? Math.round(selectedSource.height) : frameHeight;
 
     canvas.width = sourceWidth;
     canvas.height = sourceHeight;
@@ -2708,6 +2732,16 @@ const startScanner = async () => {
   const actions = document.querySelector("#scannerActions");
   if (!reader) return;
 
+  if (!window.isSecureContext) {
+    showToast("Camera scanning needs HTTPS or 127.0.0.1/localhost.");
+    return;
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    showToast("This browser does not support camera scanning.");
+    return;
+  }
+
   if (qrScanner) await stopScanner();
   reader.classList.remove("hidden");
   launcher?.classList.add("hidden");
@@ -2731,22 +2765,25 @@ const startScanner = async () => {
   };
 
   try {
-    await qrScanner.start(
-      { facingMode: "environment" },
-      scanConfig,
-      onScanSuccess
-    );
-  } catch {
+    const cameras = await Html5Qrcode.getCameras();
+    if (cameras?.length) {
+      const rearCamera = cameras.find((camera) => /back|rear|environment/i.test(camera.label || ""));
+      await qrScanner.start((rearCamera || cameras[0]).id, scanConfig, onScanSuccess);
+      return;
+    }
+    await qrScanner.start({ facingMode: "environment" }, scanConfig, onScanSuccess);
+  } catch (firstError) {
     try {
-      const cameras = await Html5Qrcode.getCameras();
-      if (!cameras?.length) throw new Error("No camera found");
-      await qrScanner.start(cameras[0].id, scanConfig, onScanSuccess);
+      await qrScanner.start({ facingMode: "user" }, scanConfig, onScanSuccess);
     } catch (error) {
+      qrScanner = null;
       reader.classList.add("hidden");
       launcher?.classList.remove("hidden");
       actionStack?.classList.remove("hidden");
       actions?.classList.add("hidden");
-      const message = error?.message ? `Camera scanner could not start: ${error.message}` : "Camera scanner could not start. Please allow camera access.";
+      const message = error?.message || firstError?.message
+        ? `Camera scanner could not start: ${error?.message || firstError?.message}`
+        : "Camera scanner could not start. Please allow camera access.";
       showToast(message);
     }
   }
