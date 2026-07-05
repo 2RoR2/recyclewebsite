@@ -3602,8 +3602,17 @@ th {
     padding-bottom: 4.75rem;
   }
 
+  .guide-cover-page {
+    align-items: center;
+    justify-items: center;
+  }
+
   .guide-cover-page img {
+    width: 100%;
+    height: auto;
+    max-height: 100%;
     object-fit: contain;
+    object-position: center;
   }
 
   .guide-bottom-design {
