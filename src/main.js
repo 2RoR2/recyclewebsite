@@ -2890,11 +2890,16 @@ const isStandaloneApp = () =>
 const canUseInstallPrompt = () =>
   window.isSecureContext || ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 
+const userAgent = () => window.navigator.userAgent || "";
 const isAndroidDevice = () => /android/i.test(window.navigator.userAgent);
 const isAppleMobileDevice = () => /iphone|ipad|ipod/i.test(window.navigator.userAgent);
-const isChromiumBrowser = () => /chrome|crios|edg|opr|samsungbrowser/i.test(window.navigator.userAgent);
+const isChromiumBrowser = () => /chrome|crios|edg|opr|samsungbrowser/i.test(userAgent());
+const isInAppBrowser = () =>
+  /FBAN|FBAV|Instagram|Line|MicroMessenger|Twitter|WhatsApp|wv/i.test(userAgent());
+const isSafariBrowser = () =>
+  /^((?!chrome|crios|fxios|edg|opr|samsungbrowser|android).)*safari/i.test(userAgent());
 
-const waitForInstallPrompt = (timeout = 1400) => {
+const waitForInstallPrompt = (timeout = 3500) => {
   if (deferredInstallPrompt) return Promise.resolve(deferredInstallPrompt);
   return new Promise((resolve) => {
     const waiter = (event) => {
@@ -2912,6 +2917,10 @@ const waitForInstallPrompt = (timeout = 1400) => {
 };
 
 const installHelpText = () => {
+  if (isInAppBrowser()) {
+    return "Open EcoCycle in Safari or Chrome first. In-app browsers such as WhatsApp cannot show the real install popup.";
+  }
+
   if (isAppleMobileDevice()) {
     return "On iPhone or iPad, open this site in Safari, tap Share, then choose Add to Home Screen.";
   }
@@ -2928,6 +2937,27 @@ const installHelpText = () => {
 };
 
 const installHelpHtml = () => {
+  if (isInAppBrowser()) {
+    return isAppleMobileDevice()
+      ? `
+        <p>WhatsApp and other in-app browsers cannot install web apps directly.</p>
+        <ol style="text-align:left">
+          <li>Tap the browser options button.</li>
+          <li>Open this page in <strong>Safari</strong>.</li>
+          <li>In Safari, tap <strong>Share</strong>.</li>
+          <li>Choose <strong>Add to Home Screen</strong>.</li>
+        </ol>
+      `
+      : `
+        <p>WhatsApp and other in-app browsers cannot show the real install popup.</p>
+        <ol style="text-align:left">
+          <li>Tap the browser options button.</li>
+          <li>Open this page in <strong>Chrome</strong>.</li>
+          <li>Tap <strong>Install</strong> again, or use Chrome menu &gt; <strong>Install app</strong>.</li>
+        </ol>
+      `;
+  }
+
   if (isAppleMobileDevice()) {
     return `
       <p>iPhone and iPad do not allow websites to open the install popup directly.</p>
@@ -2966,8 +2996,19 @@ const showInstallPrompt = async () => {
     return;
   }
 
-  if (!deferredInstallPrompt && canUseInstallPrompt() && isChromiumBrowser()) {
-    await navigator.serviceWorker?.ready?.catch(() => undefined);
+  if (isInAppBrowser() || (isAppleMobileDevice() && isSafariBrowser())) {
+    Swal.fire({
+      title: "Install EcoCycle",
+      html: installHelpHtml(),
+      icon: "info",
+      confirmButtonText: "Got it",
+      confirmButtonColor: "#0b0b0d",
+    });
+    return;
+  }
+
+  if (!deferredInstallPrompt && canUseInstallPrompt() && isChromiumBrowser() && "serviceWorker" in navigator) {
+    await navigator.serviceWorker.ready.catch(() => undefined);
     await waitForInstallPrompt();
   }
 

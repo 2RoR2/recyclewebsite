@@ -15558,3 +15558,21 @@ body[data-role="admin"] .panel button.password-toggle:hover {
   background: transparent !important;
   color: #0f6a34 !important;
 }
+
+.install-nav-btn:hover,
+body[data-role="guest"] .install-nav-btn:hover,
+body[data-role="user"] .install-nav-btn:hover,
+body[data-role="admin"] .install-nav-btn:hover {
+  border-color: #ffd318 !important;
+  background: #0f4327 !important;
+  color: #ffd318 !important;
+  box-shadow: 0 12px 28px rgba(15, 67, 39, 0.28), 0 0 0 3px rgba(255, 211, 24, 0.22) !important;
+}
+
+.install-nav-btn:hover span:first-child,
+body[data-role="guest"] .install-nav-btn:hover span:first-child,
+body[data-role="user"] .install-nav-btn:hover span:first-child,
+body[data-role="admin"] .install-nav-btn:hover span:first-child {
+  background: #ffd318 !important;
+  color: #0f4327 !important;
+}
